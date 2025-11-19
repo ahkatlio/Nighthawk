@@ -4,6 +4,9 @@
 
 ## What's New ✨
 
+### 🚀 Metasploit Integration
+Nighthawk now **remembers nmap scans** and uses that data to **find exploits automatically**! Just scan a target, then ask "find exploits" and it will use Metasploit with the discovered services!
+
 ### Smart Conversation Mode
 Nighthawk now **distinguishes between chatting and scanning**! Say "hey my name is Galib" and it won't try to scan galib.com. Only scans when you explicitly ask!
 
@@ -47,8 +50,28 @@ You: Quick scan of localhost
 → Runs: nmap -Pn -F localhost
 → Shows results
 
+You: find exploits
+→ Uses previous nmap data
+→ Runs: msfconsole with context-aware commands
+→ Searches for exploits matching discovered services
+
 You: tools
 → Shows all available security tools
+```
+
+### Complete Workflow Example 🔥
+
+```
+You: scan target.com
+→ 🔍 Nmap finds: SSH (22), HTTP (80), MySQL (3306)
+
+You: find exploits for mysql
+→ 💥 Metasploit searches exploits for MySQL
+→ Uses the version detected in previous scan
+→ Suggests relevant exploits
+
+You: quit
+→ All data auto-deleted for privacy
 ```
 
 ## Project Structure
@@ -59,6 +82,7 @@ Nighthawk/
 ├── tools/               # 🔧 Security tool modules
 │   ├── base_tool.py    # Base class
 │   ├── nmap_tool.py    # Nmap (✅ integrated)
+│   ├── metasploit_tool.py  # Metasploit (✅ integrated)
 │   └── nikto_tool.py   # Nikto (template)
 ├── start.sh            # Quick launch
 └── requirements.txt    # Dependencies
@@ -72,11 +96,18 @@ Nighthawk/
 - OS detection
 - Auto `-Pn` flag when needed
 - URL → hostname extraction
+- **Data parsing for other tools**
+
+### Metasploit ✅
+- **Context-aware exploit search**
+- Uses previous nmap scan data
+- Automatically targets discovered services
+- Resource script generation
+- Interactive exploit suggestions
 
 ### Coming Soon
 - Nikto (web scanner)
 - SQLmap (SQL injection)
-- Metasploit (exploits)
 - More tools...
 
 ## Adding New Tools
