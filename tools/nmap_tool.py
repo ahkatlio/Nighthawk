@@ -132,3 +132,63 @@ When analyzing nmap output, provide:
 2. Open ports and services discovered
 3. Potential security concerns
 4. Recommended next steps for deeper analysis"""
+    
+    def parse_scan_data(self, raw_output: str) -> dict:
+        """
+        Parse nmap output to extract structured data for other tools
+        
+        Args:
+            raw_output: Raw nmap scan output
+        
+        Returns:
+            Dictionary with open_ports, services, os, ip
+        """
+        scan_data = {
+            'open_ports': [],
+            'services': [],
+            'os': None,
+            'ip': None
+        }
+        
+        # Extract open ports and services
+        # Pattern: PORT     STATE SERVICE    VERSION
+        # Example: 22/tcp   open  ssh        OpenSSH 8.9p1
+        port_pattern = r'(\d+)/tcp\s+open\s+(\S+)\s*(.*)?'
+        matches = re.findall(port_pattern, raw_output)
+        
+        for match in matches:
+            port_info = {
+                'port': match[0],
+                'service': match[1],
+                'version': match[2].strip() if len(match) > 2 else ''
+            }
+            scan_data['open_ports'].append(port_info)
+            scan_data['services'].append(match[1])
+        
+        # Extract OS information
+        os_patterns = [
+            r'OS details?: (.+)',
+            r'Running: (.+)',
+            r'OS CPE: cpe:/o:([^:]+):([^:]+)'
+        ]
+        
+        for pattern in os_patterns:
+            os_match = re.search(pattern, raw_output)
+            if os_match:
+                scan_data['os'] = os_match.group(1).strip()
+                break
+        
+        # Extract IP address
+        ip_patterns = [
+            r'Nmap scan report for .*?\(([0-9.]+)\)',
+            r'Nmap scan report for ([0-9.]+)'
+        ]
+        
+        for pattern in ip_patterns:
+            ip_match = re.search(pattern, raw_output)
+            if ip_match:
+                scan_data['ip'] = ip_match.group(1)
+                break
+        
+        return scan_data
+
