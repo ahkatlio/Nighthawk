@@ -6,7 +6,7 @@ AI-powered security tool orchestrator using Ollama
 
 import sys
 import re
-from typing import Optional
+from typing import Optional, Dict
 from urllib.parse import urlparse
 import ollama
 from rich.console import Console
@@ -18,6 +18,7 @@ from rich.table import Table
 from rich import box
 
 from tools.nmap_tool import NmapTool
+from tools.metasploit_tool import MetasploitTool
 from tools.base_tool import BaseTool
 
 console = Console()
@@ -32,7 +33,8 @@ class NighthawkAssistant:
         self.tools = {}
         self.active_tool = None
         self.conversation_history = []  # Temporary conversation storage
-        self.scan_results = {}  # Temporary scan results storage
+        self.scan_results = {}  # Temporary scan results storage (stores tool outputs)
+        self.last_target = None  # Remember the last scanned target
         
         # Register available tools
         self._register_tools()
@@ -43,10 +45,13 @@ class NighthawkAssistant:
         nmap = NmapTool()
         self.tools['nmap'] = nmap
         
+        # Add Metasploit
+        metasploit = MetasploitTool()
+        self.tools['metasploit'] = metasploit
+        
         # Future tools will be added here:
         # self.tools['nikto'] = NiktoTool()
         # self.tools['sqlmap'] = SQLMapTool()
-        # self.tools['metasploit'] = MetasploitTool()
         # etc.
     
     def check_ollama_connection(self) -> bool:
@@ -296,7 +301,50 @@ Respond with ONLY the command (one line, no explanations)."""
                 else:
                     user_input_for_ai = user_input
                 
-                # Get AI response (try nmap context first as default)
+                # Detect if user wants exploits/metasploit
+                wants_exploits = any(keyword in user_input.lower() for keyword in 
+                                    ['exploit', 'metasploit', 'msfconsole', 'vulnerability', 'vuln', 'hack'])
+                
+                # Determine which tool to use
+                if wants_exploits and 'metasploit' in self.tools:
+                    tool_name = 'metasploit'
+                    tool = self.tools['metasploit']
+                    
+                    # Prepare scan context from previous nmap results
+                    scan_context = self.prepare_scan_context(hostname or self.last_target)
+                    
+                    if scan_context:
+                        console.print(f"[dim]Using previous scan data for {scan_context.get('target', 'target')}[/dim]")
+                    
+                    # Generate Metasploit commands with context
+                    commands = tool.generate_command(user_input_for_ai, scan_context)
+                    
+                    if commands:
+                        # Execute Metasploit commands
+                        result = tool.execute(commands)
+                        
+                        if result['success']:
+                            tool.format_output(result, commands)
+                            
+                            # Store result
+                            target = hostname or self.last_target or "unknown"
+                            self.scan_results[f"{target}_metasploit"] = result['stdout']
+                            
+                            # Get AI analysis
+                            console.print("\n[dim]Analyzing exploit results...[/dim]")
+                            analysis = self.ask_ollama(
+                                user_input,
+                                output_to_analyze=result['stdout']
+                            )
+                            self.display_analysis(analysis)
+                        else:
+                            console.print(f"[bold red]Error:[/bold red] {result.get('error', 'Unknown error')}")
+                    else:
+                        console.print("[yellow]Could not generate Metasploit commands[/yellow]")
+                    
+                    continue
+                
+                # Default to nmap or other scanning tools
                 tool_context = self.tools['nmap'].get_ai_prompt()
                 ai_response = self.ask_ollama(user_input_for_ai, tool_context=tool_context)
                 
@@ -324,6 +372,12 @@ Respond with ONLY the command (one line, no explanations)."""
                         # Store scan result temporarily
                         target = hostname if hostname else "unknown"
                         self.scan_results[target] = result['stdout']
+                        self.last_target = target  # Remember last target
+                        
+                        # Parse and store structured data for Metasploit to use
+                        if tool_name == 'nmap' and hasattr(tool, 'parse_scan_data'):
+                            parsed_data = tool.parse_scan_data(result['stdout'])
+                            self.scan_results[f"{target}_parsed"] = parsed_data
                         
                         self.display_results(result['stdout'], tool_name)
                         
@@ -347,6 +401,44 @@ Respond with ONLY the command (one line, no explanations)."""
                 console.print("\n[yellow]Interrupted. Type 'quit' to exit.[/yellow]")
             except Exception as e:
                 console.print(f"[bold red]Error:[/bold red] {e}")
+    
+    def prepare_scan_context(self, target: Optional[str] = None) -> Optional[Dict]:
+        """
+        Prepare scan context from previous nmap results for use in other tools
+        
+        Args:
+            target: Target to get context for (or use last_target)
+        
+        Returns:
+            Dictionary with target, ip, open_ports, services, os info
+        """
+        if not target:
+            target = self.last_target
+        
+        if not target or target not in self.scan_results:
+            return None
+        
+        # Check if we have parsed data
+        parsed_key = f"{target}_parsed"
+        if parsed_key in self.scan_results:
+            scan_data = self.scan_results[parsed_key]
+            scan_data['target'] = target
+            return scan_data
+        
+        # If no parsed data, try to use the metasploit tool's parser
+        if 'metasploit' in self.tools:
+            raw_output = self.scan_results.get(target, '')
+            if raw_output:
+                metasploit_tool = self.tools['metasploit']
+                parsed_data = metasploit_tool.parse_scan_data(raw_output)
+                parsed_data['target'] = target
+                
+                # Cache it for future use
+                self.scan_results[parsed_key] = parsed_data
+                
+                return parsed_data
+        
+        return None
     
     def cleanup(self):
         """Clean up temporary data (called on exit)"""
