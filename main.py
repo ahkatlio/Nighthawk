@@ -97,29 +97,58 @@ class NighthawkAssistant:
     def is_scan_request(self, user_request: str) -> bool:
         """Determine if user wants to scan or just chat"""
         scan_keywords = [
-            'scan', 'nmap', 'port', 'detect', 'find', 'check',
-            'vulnerability', 'exploit', 'enumerate', 'discover',
-            'test', 'probe', 'analyze target', 'security check',
+            'scan', 'nmap', 'port', 'detect', 'find ports', 'check target',
+            'enumerate', 'discover services',
+            'test target', 'probe target', 'analyze target', 'security check',
             'open ports', 'services running', 'os detection',
             'stealth', 'udp scan', 'tcp scan'
         ]
         
-        # Exclude casual conversation patterns
+        # Exploit-related action patterns (regex for flexible matching)
+        exploit_patterns = [
+            r'find\s+(the\s+|that\s+)?exploit',
+            r'run\s+(the\s+|that\s+)?exploit',
+            r'use\s+(the\s+|that\s+)?exploit',
+            r'exploit\s+(the\s+|this\s+|that\s+)?target',
+            r'exploit\s+(the\s+|this\s+|that\s+)?website',
+            r'try\s+(the\s+|that\s+|an?\s+)?exploit',
+            r'attempt\s+(the\s+|that\s+|an?\s+)?exploit',
+            r'launch\s+(the\s+|that\s+|an?\s+)?exploit',
+            r'execute\s+(the\s+|that\s+)?exploit',
+            r'run\s+metasploit',
+            r'use\s+metasploit',
+            r'start\s+metasploit',
+            r'msfconsole',
+            r'hack\s+(the\s+|this\s+|that\s+)?target',
+            r'hack\s+(the\s+|this\s+|that\s+)?website',
+            r'penetrate',
+            r'pwn'
+        ]
+        
+        # Exclude casual conversation patterns and questions
         casual_patterns = [
             r'^(hi|hello|hey|yo)\b',
             r'\b(my name is|i am|i\'m)\b',
             r'^(thanks|thank you|thx)',
             r'^(how are you|what\'s up|sup)',
             r'^(help|info|about)',
-            r'\b(weather|time|date)\b'
+            r'\b(weather|time|date)\b',
+            r'^(can i|could i|how do i|what is|what are|why)',  # Questions
+            r'\b(tell me|explain|show me)\b',  # Information requests
+            r'\?$',  # Ends with question mark
         ]
         
         request_lower = user_request.lower()
         
-        # Check if it's casual conversation
+        # Check if it's casual conversation (questions) first
         for pattern in casual_patterns:
             if re.search(pattern, request_lower):
                 return False
+        
+        # Check for exploit patterns
+        for pattern in exploit_patterns:
+            if re.search(pattern, request_lower):
+                return True
         
         # Check if it contains scan keywords
         for keyword in scan_keywords:
@@ -162,7 +191,16 @@ Provide clear, actionable insights. Remember previous scan results to give compr
             if self.scan_results:
                 context = "\n\nPrevious scan results for context:\n"
                 for target, result in list(self.scan_results.items())[-3:]:  # Last 3 scans
-                    context += f"- {target}: {result[:200]}...\n"
+                    # Handle both string results and dict results (parsed data)
+                    if isinstance(result, str):
+                        context += f"- {target}: {result[:200]}...\n"
+                    elif isinstance(result, dict):
+                        # For parsed data, create a summary
+                        if 'open_ports' in result:
+                            ports = [p.get('port', '?') for p in result.get('open_ports', [])]
+                            context += f"- {target}: Found {len(ports)} open ports: {', '.join(ports[:5])}\n"
+                        else:
+                            context += f"- {target}: (parsed data available)\n"
             
             prompt = f"""Analyze this security scan output:{context}
 
@@ -301,9 +339,29 @@ Respond with ONLY the command (one line, no explanations)."""
                 else:
                     user_input_for_ai = user_input
                 
-                # Detect if user wants exploits/metasploit
-                wants_exploits = any(keyword in user_input.lower() for keyword in 
-                                    ['exploit', 'metasploit', 'msfconsole', 'vulnerability', 'vuln', 'hack'])
+                # Detect if user wants exploits/metasploit (action commands, not questions)
+                # Use regex to be more flexible with articles (the, a, an)
+                exploit_patterns = [
+                    r'find\s+(the\s+|that\s+)?exploit',
+                    r'run\s+(the\s+|that\s+)?exploit',
+                    r'use\s+(the\s+|that\s+)?exploit',
+                    r'exploit\s+(the\s+|this\s+|that\s+)?target',
+                    r'exploit\s+(the\s+|this\s+|that\s+)?website',
+                    r'try\s+(the\s+|that\s+|an?\s+)?exploit',
+                    r'attempt\s+(the\s+|that\s+|an?\s+)?exploit',
+                    r'launch\s+(the\s+|that\s+|an?\s+)?exploit',
+                    r'execute\s+(the\s+|that\s+)?exploit',
+                    r'run\s+metasploit',
+                    r'use\s+metasploit',
+                    r'start\s+metasploit',
+                    r'msfconsole',
+                    r'hack\s+(the\s+|this\s+|that\s+)?target',
+                    r'hack\s+(the\s+|this\s+|that\s+)?website',
+                    r'penetrate',
+                    r'pwn'
+                ]
+                
+                wants_exploits = any(re.search(pattern, user_input.lower()) for pattern in exploit_patterns)
                 
                 # Determine which tool to use
                 if wants_exploits and 'metasploit' in self.tools:
@@ -313,8 +371,14 @@ Respond with ONLY the command (one line, no explanations)."""
                     # Prepare scan context from previous nmap results
                     scan_context = self.prepare_scan_context(hostname or self.last_target)
                     
-                    if scan_context:
-                        console.print(f"[dim]Using previous scan data for {scan_context.get('target', 'target')}[/dim]")
+                    if not scan_context:
+                        # No previous scan data - need to scan first
+                        console.print("[yellow]⚠ No previous scan data found![/yellow]")
+                        console.print("[cyan]💡 Tip: Run an nmap scan first, then I can find exploits based on the results.[/cyan]")
+                        console.print(f"[dim]Example: 'scan {hostname or 'target.com'}' then 'exploit that target'[/dim]")
+                        continue
+                    
+                    console.print(f"[dim]Using previous scan data for {scan_context.get('target', 'target')}[/dim]")
                     
                     # Generate Metasploit commands with context
                     commands = tool.generate_command(user_input_for_ai, scan_context)
