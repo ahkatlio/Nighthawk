@@ -198,15 +198,18 @@ class MetasploitTool(BaseTool):
         
         return payloads
     
-    def generate_command(self, user_request: str, scan_context: Optional[Dict] = None) -> str:
+    def generate_command(self, user_request: str, ai_response: str = None) -> str:
         """
-        Generate Metasploit commands based on user request and previous scan data
+        Generate Metasploit commands based on user request and AI response
         
         Args:
             user_request: What the user wants to do
-            scan_context: Previous scan results (nmap data, target info, etc.)
+            ai_response: AI's response (not used, included for compatibility)
         """
         console.print("\n[bold cyan]🤖 AI is analyzing scan results and planning exploitation...[/bold cyan]")
+        
+        # Try to get scan context from the tool's attribute (set by TUI)
+        scan_context = getattr(self, '_scan_context', None)
         
         # Get AI to decide which ports and services to target
         plan_prompt = self.get_planning_prompt(user_request, scan_context)
