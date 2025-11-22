@@ -1,0 +1,406 @@
+/* Global Styles */
+Screen {
+    background: $surface;
+}
+
+/* Tabs */
+Tabs {
+    dock: top;
+    background: $boost;
+}
+
+Tab {
+    padding: 0 2;
+}
+
+/* Hidden class for tab switching */
+.hidden {
+    display: none;
+}
+
+/* Tab content container */
+#tab-content {
+    height: 1fr;
+    width: 100%;
+}
+
+.section-title {
+    text-style: bold;
+    color: $accent;
+    margin-bottom: 1;
+}
+
+.small-btn {
+    min-width: 8;
+    margin-left: 1;
+}
+
+/* Chat Tab */
+ChatArea {
+    height: 100%;
+    layout: vertical;
+    padding: 0;
+}
+
+#chat-split {
+    height: 1fr;
+    layout: horizontal;
+}
+
+#left-chat {
+    width: 70%;
+    height: 100%;
+    border: solid $primary;
+    padding: 1;
+}
+
+#right-logs {
+    width: 30%;
+    height: 100%;
+    border: solid $accent;
+    padding: 1;
+    margin-left: 1;
+}
+
+#chat-header {
+    height: auto;
+    layout: horizontal;
+    margin-bottom: 1;
+    align: center middle;
+}
+
+#chat-header .section-title {
+    width: 1fr;
+    margin: 0;
+}
+
+.user-message {
+    background: $boost;
+    padding: 1;
+    margin: 1 0;
+    border-left: thick $primary;
+    height: auto;
+}
+
+.ai-message {
+    background: $panel;
+    padding: 1;
+    margin: 1 0;
+    border-left: thick $accent;
+    height: auto;
+}
+
+.message-header {
+    color: $text-muted;
+    text-style: bold;
+}
+
+.message-content {
+    margin-top: 1;
+}
+
+#chat-history {
+    height: 1fr;
+    overflow-y: auto;
+    scrollbar-size: 1 1;
+}
+
+#input-container {
+    height: auto;
+    border-top: solid $primary;
+    padding: 1;
+    background: $surface;
+}
+
+#model-status-bar {
+    layout: horizontal;
+    height: auto;
+    margin-bottom: 1;
+}
+
+#mode-indicator {
+    text-style: bold;
+    width: 1fr;
+}
+
+#model-indicator {
+    text-style: bold;
+    text-align: right;
+    width: 1fr;
+    color: $accent;
+}
+
+#input-area {
+    layout: horizontal;
+    height: 3;
+    align: center middle;
+}
+
+#chat-input {
+    width: 1fr;
+    height: 3;
+    margin-right: 1;
+}
+
+#send-btn {
+    height: 3;
+    min-width: 12;
+}
+
+#input-hint {
+    color: $text-muted;
+    margin-top: 1;
+    text-align: center;
+    height: 1;
+}
+
+#log-header {
+    height: auto;
+    background: $boost;
+    padding: 1;
+    margin-bottom: 1;
+}
+
+#log-controls {
+    layout: horizontal;
+    height: auto;
+    margin-top: 1;
+}
+
+#log-controls Checkbox {
+    margin-right: 2;
+}
+
+#process-progress {
+    margin: 1 0;
+    width: 100%;
+}
+
+#status-bar {
+    layout: horizontal;
+    height: auto;
+    align: center middle;
+    background: $panel;
+    padding: 0 1;
+    margin-top: 1;
+}
+
+#loading-spinner {
+    width: auto;
+    height: 1;
+    margin-right: 1;
+}
+
+#status-indicator {
+    width: 1fr;
+    text-align: center;
+}
+
+RichLog {
+    height: 1fr;
+    background: $surface;
+    border: solid $panel;
+    overflow-y: auto;
+    scrollbar-size: 1 1;
+}
+
+/* Settings Tab */
+SettingsTab {
+    layout: vertical;
+    padding: 0;
+    height: 100%;
+}
+
+#settings-scroll {
+    height: 100%;
+    padding: 2;
+}
+
+.page-title {
+    text-style: bold;
+    text-align: center;
+    margin-bottom: 2;
+    color: $accent;
+}
+
+.settings-group {
+    background: $panel;
+    border: solid $primary;
+    padding: 2;
+    margin-bottom: 2;
+    height: auto;
+}
+
+.group-title {
+    text-style: bold;
+    color: $secondary;
+    margin-bottom: 1;
+    border-bottom: solid $secondary;
+    padding-bottom: 1;
+}
+
+.setting-row {
+    layout: horizontal;
+    height: auto;
+    margin: 1 0;
+    align: left middle;
+}
+
+.setting-label {
+    margin-top: 1;
+    margin-bottom: 1;
+    color: $text-muted;
+}
+
+.inline-label {
+    width: 1fr;
+    color: $text;
+}
+
+.action-bar {
+    layout: horizontal;
+    align: center middle;
+    height: auto;
+    margin-top: 2;
+    padding: 2;
+}
+
+.action-bar Button {
+    margin: 0 1;
+}
+
+/* Manual Tab */
+ManualTab {
+    layout: vertical;
+    padding: 0;
+    height: 100%;
+}
+
+#manual-search-bar {
+    dock: top;
+    height: auto;
+    background: $boost;
+    padding: 1;
+    border-bottom: solid $primary;
+}
+
+#manual-search {
+    width: 1fr;
+    margin-right: 1;
+}
+
+#manual-scroll {
+    height: 1fr;
+    padding: 2;
+}
+
+#manual-content {
+    padding: 1;
+}
+
+/* Tool Management Tab */
+ToolManagementTab {
+    layout: vertical;
+    padding: 0;
+    height: 100%;
+}
+
+#tools-scroll {
+    height: 100%;
+    padding: 2;
+}
+
+#tools-table {
+    height: auto;
+    min-height: 15;
+    margin: 1 0 2 0;
+    border: solid $primary;
+}
+
+.tool-actions-container {
+    height: auto;
+    margin-top: 2;
+}
+
+.action-row {
+    layout: horizontal;
+    height: auto;
+    align: center top;
+}
+
+.tool-card {
+    width: 1fr;
+    height: auto;
+    background: $panel;
+    border: solid $accent;
+    padding: 2;
+    margin: 0 1;
+}
+
+.card-title {
+    text-style: bold;
+    color: $primary;
+    margin-bottom: 1;
+    text-align: center;
+}
+
+.card-desc {
+    color: $text-muted;
+    margin-bottom: 1;
+    text-align: center;
+}
+
+.tool-card Button {
+    width: 100%;
+    margin-bottom: 1;
+}
+
+/* Sudo Password Dialog */
+#sudo-dialog {
+    width: 60;
+    height: auto;
+    padding: 2;
+    background: $surface;
+    border: thick $primary;
+    align: center middle;
+}
+
+#sudo-title {
+    text-style: bold;
+    color: $accent;
+    text-align: center;
+    margin-bottom: 1;
+}
+
+.sudo-label {
+    color: $text;
+    margin-top: 1;
+    text-align: center;
+}
+
+.sudo-command {
+    color: $warning;
+    text-align: center;
+    margin: 1 0;
+}
+
+#sudo-password-input {
+    width: 100%;
+    margin: 1 0;
+}
+
+.sudo-buttons {
+    width: 100%;
+    height: auto;
+    align: center middle;
+    margin-top: 1;
+}
+
+.sudo-buttons Button {
+    width: 15;
+    margin: 0 1;
+}
+
+SudoPasswordScreen {
+    align: center middle;
+}
