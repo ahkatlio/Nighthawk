@@ -424,7 +424,8 @@ Respond with ONLY the command (one line, no explanations)."""
         elif model_name in ["gemini", "google"]:
             if self.gemini_chat:
                 self.current_model = "gemini"
-                console.print("[green]✓ Switched to Google Gemini (gemini-2.5-flash)[/green]")
+                console.print("[green]✓ Switched to Google Gemini 2.5 Flash (for chat)[/green]")
+                console.print("[dim]Note: Exploitation uses auto-fallback: 2.5 Pro → 2.0 Flash → Ollama[/dim]")
                 return True
             else:
                 console.print("[red]✗ Gemini is not available. Check your API key in .env file.[/red]")
@@ -450,17 +451,18 @@ Respond with ONLY the command (one line, no explanations)."""
         """Run interactive mode"""
         model_status = f"Ollama ({self.model})"
         if self.gemini_chat:
-            model_status += " + Gemini (gemini-2.5-flash)"
+            model_status += " + Gemini 2.5 Pro + Gemini 2.0 Flash"
         
         console.print(Panel.fit(
             "[bold cyan]Nighthawk Security Assistant[/bold cyan]\n"
             "AI-powered security tool orchestrator\n\n"
             f"Models: {model_status}\n"
             f"Active: [bold]{self.current_model}[/bold]\n"
+            f"Fallback Chain: Gemini 2.5 Pro → 2.0 Flash → Ollama\n"
             f"Tools: {', '.join(self.tools.keys())}",
             border_style="cyan",
             title="🦅 Nighthawk",
-            subtitle="Dual AI Model"
+            subtitle="Triple AI Fallback System"
         ))
         
         # Check prerequisites
