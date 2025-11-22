@@ -33,15 +33,23 @@ class StatusCommand(BaseCommand):
         if assistant.current_model == "ollama":
             model_name += f" ({assistant.model})"
         else:
-            model_name += " (gemini-2.5-flash)"
+            model_name += " (Gemini 2.5 Flash - Chat)"
         
         table.add_row("Active Model", model_name)
         
-        # Available models
-        available = ["Ollama"]
+        # Exploitation AI
         if assistant.gemini_chat:
-            available.append("Gemini")
-        table.add_row("Available Models", ", ".join(available))
+            table.add_row("Exploitation AI", "Auto-fallback (2.5 Pro → 2.0 Flash → Ollama)")
+        else:
+            table.add_row("Exploitation AI", "Ollama only")
+        
+        # Available models with fallback chain
+        available = ["Ollama (Local)"]
+        if assistant.gemini_chat:
+            available.append("Gemini 2.5 Pro (Primary)")
+            available.append("Gemini 2.0 Flash (Fast)")
+        table.add_row("AI Models", ", ".join(available))
+        table.add_row("Fallback Chain", "2.5 Pro → 2.0 Flash → Ollama" if assistant.gemini_chat else "Ollama only")
         
         # Scan results count
         scan_count = len([k for k in assistant.scan_results.keys() if not k.endswith('_parsed') and not k.endswith('_metasploit')])
