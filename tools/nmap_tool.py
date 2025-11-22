@@ -53,6 +53,36 @@ class NmapTool(BaseTool):
                 command = line
                 break
         
+        # If no command found in AI response, try to generate one from user request
+        if not command:
+            console.print("[yellow]No nmap command in AI response, generating basic scan...[/yellow]")
+            
+            # Extract target from user request
+            import re
+            # Look for URLs, IPs, or hostnames
+            url_pattern = r'(?:https?://)?(?:www\.)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})'
+            ip_pattern = r'\b(?:\d{1,3}\.){3}\d{1,3}\b'
+            
+            target = None
+            
+            # Try IP first
+            ip_match = re.search(ip_pattern, user_request)
+            if ip_match:
+                target = ip_match.group(0)
+            else:
+                # Try hostname/URL
+                url_match = re.search(url_pattern, user_request)
+                if url_match:
+                    target = url_match.group(1)
+            
+            if target:
+                # Generate basic scan command
+                command = f"nmap -Pn -sV -sC {target}"
+                console.print(f"[cyan]Generated command: {command}[/cyan]")
+            else:
+                console.print("[red]Could not extract target from request[/red]")
+                return None
+        
         if command:
             parts = command.split()
             
