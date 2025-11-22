@@ -38,10 +38,11 @@ class BaseTool(ABC):
         """Format the tool output for display"""
         pass
     
-    def run_command(self, command: str, timeout: int = 300) -> Dict[str, any]:
+    def run_command(self, command: str, timeout: int = 300, silent: bool = False) -> Dict[str, any]:
         """Generic command execution with timeout"""
         try:
-            console.print(f"\n[bold cyan]Executing:[/bold cyan] {command}")
+            if not silent:
+                console.print(f"\n[bold cyan]Executing:[/bold cyan] {command}")
             
             result = subprocess.run(
                 command,
