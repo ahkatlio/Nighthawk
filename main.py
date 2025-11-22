@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """
 Nighthawk Security Assistant
-AI-powered security tool orchestrator using Ollama
+AI-powered security tool orchestrator using Ollama and Google Gemini
 """
 
 import sys
+import os
 import re
 from typing import Optional, Dict
 from urllib.parse import urlparse
 import ollama
+import google.generativeai as genai
+from dotenv import load_dotenv
 from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
@@ -20,6 +23,10 @@ from rich import box
 from tools.nmap_tool import NmapTool
 from tools.metasploit_tool import MetasploitTool
 from tools.base_tool import BaseTool
+from cli.command_manager import CommandManager
+
+# Load environment variables
+load_dotenv()
 
 console = Console()
 
@@ -29,15 +36,41 @@ class NighthawkAssistant:
     
     def __init__(self, model: str = "dolphin-llama3:8b"):
         self.model = model
+        self.current_model = "ollama"  # Track which model is active: 'ollama' or 'gemini'
         self.console = Console()
         self.tools = {}
         self.active_tool = None
-        self.conversation_history = []  # Temporary conversation storage
+        self.conversation_history = []  # Temporary conversation storage (shared between both models)
         self.scan_results = {}  # Temporary scan results storage (stores tool outputs)
         self.last_target = None  # Remember the last scanned target
         
+        # Initialize CLI command manager
+        self.command_manager = CommandManager()
+        
+        # Initialize Google Gemini
+        self.gemini_chat = None
+        self._init_gemini()
+        
         # Register available tools
         self._register_tools()
+    
+    def _init_gemini(self):
+        """Initialize Google Gemini API"""
+        try:
+            api_key = os.getenv("GOOGLE_API_KEY")
+            if api_key:
+                genai.configure(api_key=api_key)
+                model = genai.GenerativeModel(
+                    model_name="gemini-2.5-flash",
+                    system_instruction="You are Nighthawk, a security expert assistant. Help with security scanning, provide clear insights, and remember conversation context."
+                )
+                self.gemini_chat = model.start_chat(history=[])
+                console.print("[dim green]✓ Google Gemini initialized[/dim green]")
+            else:
+                console.print("[dim yellow]⚠ Google API key not found - Gemini unavailable[/dim yellow]")
+        except Exception as e:
+            console.print(f"[dim yellow]⚠ Gemini initialization failed: {e}[/dim yellow]")
+            self.gemini_chat = None
     
     def _register_tools(self):
         """Register all available security tools"""
@@ -94,8 +127,61 @@ class NighthawkAssistant:
         
         return None
     
-    def is_scan_request(self, user_request: str) -> bool:
-        """Determine if user wants to scan or just chat"""
+    def detect_user_intent(self, user_request: str) -> str:
+        """Use AI to determine if user wants to scan/exploit or just chat"""
+        intent_prompt = """You are an intent classifier. Analyze the message and respond with ONLY ONE WORD:
+
+SCAN - if user wants network scanning, port detection, service enumeration
+EXPLOIT - if user wants to exploit, hack, penetrate, find vulnerabilities
+CHAT - if it's casual conversation, questions, greetings
+
+User message: """
+        
+        try:
+            # Call Ollama directly to avoid conversation history pollution
+            if self.current_model == "gemini" and self.gemini_chat:
+                # For Gemini, create a new temporary chat for classification
+                temp_model = genai.GenerativeModel(
+                    model_name="gemini-2.5-flash",
+                    system_instruction="You are an intent classifier. Respond with only: SCAN, EXPLOIT, or CHAT"
+                )
+                temp_chat = temp_model.start_chat(history=[])
+                response = temp_chat.send_message(intent_prompt + user_request)
+                intent = response.text.strip().upper()
+            else:
+                # For Ollama, make a direct call without polluting conversation history
+                response = ollama.chat(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": "You are an intent classifier. Respond with ONLY one word: SCAN, EXPLOIT, or CHAT"},
+                        {"role": "user", "content": intent_prompt + user_request}
+                    ]
+                )
+                intent = response['message']['content'].strip().upper()
+            
+            # Extract the first word if AI gave more than one word
+            if ' ' in intent:
+                intent = intent.split()[0]
+            
+            # Validate response
+            if intent in ['SCAN', 'EXPLOIT', 'CHAT']:
+                return intent
+            
+            # Fallback: check for keywords if AI response is unclear
+            request_lower = user_request.lower()
+            if any(word in request_lower for word in ['scan', 'nmap', 'port', 'enumerate']):
+                return 'SCAN'
+            elif any(word in request_lower for word in ['exploit', 'hack', 'metasploit', 'penetrate']):
+                return 'EXPLOIT'
+            else:
+                return 'CHAT'
+                
+        except Exception as e:
+            # Fallback to keyword detection silently
+            return self._fallback_intent_detection(user_request)
+    
+    def _fallback_intent_detection(self, user_request: str) -> str:
+        """Fallback keyword-based intent detection if AI fails"""
         scan_keywords = [
             'scan', 'nmap', 'port', 'detect', 'find ports', 'check target',
             'enumerate', 'discover services',
@@ -109,8 +195,11 @@ class NighthawkAssistant:
             r'find\s+(the\s+|that\s+)?exploit',
             r'run\s+(the\s+|that\s+)?exploit',
             r'use\s+(the\s+|that\s+)?exploit',
-            r'exploit\s+(the\s+|this\s+|that\s+)?target',
-            r'exploit\s+(the\s+|this\s+|that\s+)?website',
+            r'exploit\s+(the\s+|this\s+|that\s+|all\s+)?target',
+            r'exploit\s+(the\s+|this\s+|that\s+|all\s+)?website',
+            r'exploit\s+(the\s+|all\s+)?port',
+            r'exploit\s+everything',
+            r'exploit\s+all',
             r'try\s+(the\s+|that\s+|an?\s+)?exploit',
             r'attempt\s+(the\s+|that\s+|an?\s+)?exploit',
             r'launch\s+(the\s+|that\s+|an?\s+)?exploit',
@@ -121,47 +210,28 @@ class NighthawkAssistant:
             r'msfconsole',
             r'hack\s+(the\s+|this\s+|that\s+)?target',
             r'hack\s+(the\s+|this\s+|that\s+)?website',
+            r'hack\s+all',
             r'penetrate',
             r'pwn'
         ]
         
-        # Exclude casual conversation patterns and questions
-        casual_patterns = [
-            r'^(hi|hello|hey|yo)\b',
-            r'\b(my name is|i am|i\'m)\b',
-            r'^(thanks|thank you|thx)',
-            r'^(how are you|what\'s up|sup)',
-            r'^(help|info|about)',
-            r'\b(weather|time|date)\b',
-            r'^(can i|could i|how do i|what is|what are|why)',  # Questions
-            r'\b(tell me|explain|show me)\b',  # Information requests
-            r'\?$',  # Ends with question mark
-        ]
-        
         request_lower = user_request.lower()
         
-        # Check if it's casual conversation (questions) first
-        for pattern in casual_patterns:
-            if re.search(pattern, request_lower):
-                return False
-        
-        # Check for exploit patterns
+        # Check exploit patterns first
         for pattern in exploit_patterns:
             if re.search(pattern, request_lower):
-                return True
+                return 'EXPLOIT'
         
-        # Check if it contains scan keywords
+        # Check scan keywords
         for keyword in scan_keywords:
             if keyword in request_lower:
-                return True
+                return 'SCAN'
         
-        # If contains IP address or domain-like pattern with action words
-        if re.search(r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', request_lower):
-            return True
-        if re.search(r'https?://', request_lower) and any(k in request_lower for k in ['scan', 'check', 'test']):
-            return True
+        # If contains IP or domain, likely a scan
+        if re.search(r'\b(?:\d{1,3}\.){3}\d{1,3}\b|\b(?:[a-z0-9-]+\.)+[a-z]{2,}\b', request_lower):
+            return 'SCAN'
         
-        return False
+        return 'CHAT'
     
     def detect_tool(self, user_request: str, ai_response: str) -> Optional[str]:
         """Detect which tool to use based on request and AI response"""
@@ -261,6 +331,109 @@ Respond with ONLY the command (one line, no explanations)."""
         except Exception as e:
             return f"Error communicating with Ollama: {e}"
     
+    def ask_gemini(self, user_request: str, tool_context: Optional[str] = None, 
+                   output_to_analyze: Optional[str] = None, is_casual: bool = False) -> str:
+        """Ask Google Gemini to interpret user request or analyze tool output"""
+        
+        if not self.gemini_chat:
+            return "Error: Google Gemini is not initialized. Check your API key in .env file."
+        
+        try:
+            # Build prompt based on context
+            if output_to_analyze:
+                # Analysis mode - include previous context
+                context = ""
+                if self.scan_results:
+                    context = "\n\nPrevious scan results for context:\n"
+                    for target, result in list(self.scan_results.items())[-3:]:
+                        if isinstance(result, str):
+                            context += f"- {target}: {result[:200]}...\n"
+                        elif isinstance(result, dict):
+                            if 'open_ports' in result:
+                                ports = [p.get('port', '?') for p in result.get('open_ports', [])]
+                                context += f"- {target}: Found {len(ports)} open ports: {', '.join(ports[:5])}\n"
+                            else:
+                                context += f"- {target}: (parsed data available)\n"
+                
+                prompt = f"""Analyze this security scan output:{context}
+
+{output_to_analyze}
+
+Provide:
+1. Summary of findings
+2. Key discoveries (ports, services, vulnerabilities)
+3. Security concerns
+4. Recommended next steps (consider previous scans if relevant)"""
+            
+            elif is_casual:
+                # Casual conversation mode
+                prompt = user_request
+            
+            else:
+                # Command generation mode
+                if tool_context:
+                    prompt = f"{tool_context}\n\nUser request: {user_request}\n\nGenerate the appropriate security tool command. Respond with ONLY the command (one line, no explanations)."
+                else:
+                    prompt = f"""User request: {user_request}
+
+Generate the appropriate security tool command.
+Respond with ONLY the command (one line, no explanations)."""
+            
+            # Send message with streaming for faster response
+            response = self.gemini_chat.send_message(prompt, stream=True)
+            
+            # Collect streamed response
+            ai_message = ""
+            for chunk in response:
+                ai_message += chunk.text
+            
+            # Check if we got any response
+            if not ai_message or len(ai_message.strip()) == 0:
+                # Content was blocked by safety filters, fallback to Ollama
+                console.print("[dim yellow]⚠ Gemini blocked response (safety filters), falling back to Ollama...[/dim yellow]")
+                return self.ask_ollama(user_request, tool_context, output_to_analyze, is_casual)
+            
+            # Store in shared conversation history
+            self.conversation_history.append({"role": "user", "content": user_request})
+            self.conversation_history.append({"role": "assistant", "content": ai_message})
+            
+            return ai_message
+        except Exception as e:
+            # Check if it's a safety filter issue
+            error_msg = str(e)
+            if "finish_reason" in error_msg or "valid Part" in error_msg or "SAFETY" in error_msg.upper():
+                console.print("[dim yellow]⚠ Gemini safety filters triggered, switching to Ollama...[/dim yellow]")
+                return self.ask_ollama(user_request, tool_context, output_to_analyze, is_casual)
+            return f"Error communicating with Google Gemini: {e}"
+    
+    def ask_ai(self, user_request: str, tool_context: Optional[str] = None, 
+               output_to_analyze: Optional[str] = None, is_casual: bool = False) -> str:
+        """Route to appropriate AI model based on current_model setting"""
+        if self.current_model == "gemini" and self.gemini_chat:
+            return self.ask_gemini(user_request, tool_context, output_to_analyze, is_casual)
+        else:
+            return self.ask_ollama(user_request, tool_context, output_to_analyze, is_casual)
+    
+    def switch_model(self, model_name: str) -> bool:
+        """Switch between AI models"""
+        model_name = model_name.lower()
+        if model_name in ["ollama", "dolphin", "local"]:
+            self.current_model = "ollama"
+            console.print(f"[green]✓ Switched to Ollama ({self.model})[/green]")
+            return True
+        elif model_name in ["gemini", "google"]:
+            if self.gemini_chat:
+                self.current_model = "gemini"
+                console.print("[green]✓ Switched to Google Gemini (gemini-2.5-flash)[/green]")
+                return True
+            else:
+                console.print("[red]✗ Gemini is not available. Check your API key in .env file.[/red]")
+                return False
+        else:
+            console.print(f"[red]✗ Unknown model: {model_name}[/red]")
+            console.print("[yellow]Available models: ollama, gemini[/yellow]")
+            return False
+    
     def display_results(self, output: str, tool_name: str):
         """Display tool results in a formatted way"""
         console.print(f"\n[bold green]{tool_name.upper()} Results:[/bold green]")
@@ -275,14 +448,19 @@ Respond with ONLY the command (one line, no explanations)."""
     
     def interactive_mode(self):
         """Run interactive mode"""
+        model_status = f"Ollama ({self.model})"
+        if self.gemini_chat:
+            model_status += " + Gemini (gemini-2.5-flash)"
+        
         console.print(Panel.fit(
             "[bold cyan]Nighthawk Security Assistant[/bold cyan]\n"
             "AI-powered security tool orchestrator\n\n"
-            f"Model: {self.model}\n"
+            f"Models: {model_status}\n"
+            f"Active: [bold]{self.current_model}[/bold]\n"
             f"Tools: {', '.join(self.tools.keys())}",
             border_style="cyan",
             title="🦅 Nighthawk",
-            subtitle="Powered by Ollama"
+            subtitle="Dual AI Model"
         ))
         
         # Check prerequisites
@@ -295,7 +473,9 @@ Respond with ONLY the command (one line, no explanations)."""
         console.print("\n[green]✓[/green] System ready!")
         console.print("\n[yellow]Commands:[/yellow]")
         console.print("  - Type your request in natural language")
+        console.print("  - Type 'help' to see all CLI commands")
         console.print("  - Type 'tools' to see available tools")
+        console.print("  - Type 'model <name>' to switch models (ollama/gemini)")
         console.print("  - Type 'quit' or 'exit' to leave\n")
         
         while True:
@@ -314,20 +494,34 @@ Respond with ONLY the command (one line, no explanations)."""
                     self.show_tools()
                     continue
                 
+                # Handle model switching
+                if user_input.lower().startswith('model '):
+                    model_name = user_input[6:].strip()
+                    self.switch_model(model_name)
+                    continue
+                
                 if not user_input.strip():
                     continue
                 
-                # Check if this is a scan request or casual conversation
-                if not self.is_scan_request(user_input):
-                    # Casual conversation mode
-                    console.print("\n[dim]💬 Chat mode[/dim]")
-                    ai_response = self.ask_ollama(user_input, is_casual=True)
+                # Check if it's a CLI command
+                if self.command_manager.parse_and_execute(user_input, self):
+                    continue
+                
+                # Use AI to detect user intent (silently)
+                intent = self.detect_user_intent(user_input)
+                
+                if intent == 'CHAT':
+                    # Casual conversation mode (no mode indicator)
+                    ai_response = self.ask_ai(user_input, is_casual=True)
                     md = Markdown(ai_response)
                     console.print(Panel(md, title="Nighthawk", border_style="cyan"))
                     continue
                 
-                # Scan request mode
-                console.print("\n[dim]🔍 Scan mode[/dim]")
+                # SCAN or EXPLOIT mode - show mode indicator
+                if intent == 'SCAN':
+                    console.print("\n[dim]🔍 Scan mode[/dim]")
+                elif intent == 'EXPLOIT':
+                    console.print("\n[dim]💥 Exploit mode[/dim]")
                 
                 # Extract hostname if URL present
                 hostname = self.extract_hostname(user_input)
@@ -339,37 +533,19 @@ Respond with ONLY the command (one line, no explanations)."""
                 else:
                     user_input_for_ai = user_input
                 
-                # Detect if user wants exploits/metasploit (action commands, not questions)
-                # Use regex to be more flexible with articles (the, a, an)
-                exploit_patterns = [
-                    r'find\s+(the\s+|that\s+)?exploit',
-                    r'run\s+(the\s+|that\s+)?exploit',
-                    r'use\s+(the\s+|that\s+)?exploit',
-                    r'exploit\s+(the\s+|this\s+|that\s+)?target',
-                    r'exploit\s+(the\s+|this\s+|that\s+)?website',
-                    r'try\s+(the\s+|that\s+|an?\s+)?exploit',
-                    r'attempt\s+(the\s+|that\s+|an?\s+)?exploit',
-                    r'launch\s+(the\s+|that\s+|an?\s+)?exploit',
-                    r'execute\s+(the\s+|that\s+)?exploit',
-                    r'run\s+metasploit',
-                    r'use\s+metasploit',
-                    r'start\s+metasploit',
-                    r'msfconsole',
-                    r'hack\s+(the\s+|this\s+|that\s+)?target',
-                    r'hack\s+(the\s+|this\s+|that\s+)?website',
-                    r'penetrate',
-                    r'pwn'
-                ]
-                
-                wants_exploits = any(re.search(pattern, user_input.lower()) for pattern in exploit_patterns)
-                
-                # Determine which tool to use
-                if wants_exploits and 'metasploit' in self.tools:
+                # If intent is EXPLOIT, use Metasploit
+                if intent == 'EXPLOIT' and 'metasploit' in self.tools:
                     tool_name = 'metasploit'
                     tool = self.tools['metasploit']
                     
                     # Prepare scan context from previous nmap results
                     scan_context = self.prepare_scan_context(hostname or self.last_target)
+                    
+                    # Validate scan_context is a dict or None
+                    if scan_context and not isinstance(scan_context, dict):
+                        console.print(f"[red]Error: Invalid scan context type: {type(scan_context)}[/red]")
+                        console.print("[yellow]Please run a scan first before exploiting[/yellow]")
+                        continue
                     
                     if not scan_context:
                         # No previous scan data - need to scan first
@@ -396,7 +572,7 @@ Respond with ONLY the command (one line, no explanations)."""
                             
                             # Get AI analysis
                             console.print("\n[dim]Analyzing exploit results...[/dim]")
-                            analysis = self.ask_ollama(
+                            analysis = self.ask_ai(
                                 user_input,
                                 output_to_analyze=result['stdout']
                             )
@@ -410,7 +586,7 @@ Respond with ONLY the command (one line, no explanations)."""
                 
                 # Default to nmap or other scanning tools
                 tool_context = self.tools['nmap'].get_ai_prompt()
-                ai_response = self.ask_ollama(user_input_for_ai, tool_context=tool_context)
+                ai_response = self.ask_ai(user_input_for_ai, tool_context=tool_context)
                 
                 # Detect which tool to use
                 tool_name = self.detect_tool(user_input, ai_response)
@@ -447,7 +623,7 @@ Respond with ONLY the command (one line, no explanations)."""
                         
                         # Get AI analysis
                         console.print("\n[dim]Analyzing results...[/dim]")
-                        analysis = self.ask_ollama(
+                        analysis = self.ask_ai(
                             user_input,
                             output_to_analyze=result['stdout']
                         )
