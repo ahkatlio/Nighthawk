@@ -296,14 +296,35 @@ Don't try to scan things unless the user explicitly asks for it."""
             if tool_context:
                 system_prompt = tool_context
             else:
+                # Detect which tool is needed and use its prompt
+                request_lower = user_request.lower()
                 system_prompt = """You are a Kali Linux security expert.
-Help users with security scanning tasks by generating appropriate tool commands.
-Respond with ONLY the command to execute, nothing else."""
+Generate ONLY the command to execute, nothing else.
+Do NOT respond with explanations or questions - ONLY the command."""
+                
+                # Use tool-specific prompts
+                if any(word in request_lower for word in ['scan', 'nmap', 'port', 'network']):
+                    if 'nmap' in self.tools:
+                        system_prompt = self.tools['nmap'].get_ai_prompt()
+                elif any(word in request_lower for word in ['exploit', 'metasploit', 'vulnerability']):
+                    if 'metasploit' in self.tools:
+                        system_prompt = """You are a penetration testing expert.
+Generate ONLY the Metasploit command, no explanations.
+Format: use exploit/... or search ..."""
             
             prompt = f"""User request: {user_request}
 
-Generate the appropriate security tool command.
-Respond with ONLY the command (one line, no explanations)."""
+CRITICAL: Respond with ONLY the command. No explanations, no questions, no greetings.
+Just the command on a single line.
+
+Example:
+User: "scan example.com"
+You: nmap -sV example.com
+
+User: "quick scan 192.168.1.1"  
+You: nmap -F 192.168.1.1
+
+Now respond to: {user_request}"""
         
         try:
             # Build messages with conversation history for context
