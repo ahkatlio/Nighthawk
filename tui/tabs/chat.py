@@ -79,6 +79,20 @@ class ChatArea(Container):
     is_processing = reactive(False)
     current_mode = reactive("CHAT")  # CHAT, SCAN, or EXPLOIT
     
+    async def _write_with_typing(self, log: RichLog, text: str, delay: float = 0.02) -> None:
+        """Write text to log with typing animation effect"""
+        # Simply add a small delay before writing to simulate typing
+        # RichLog doesn't support character-by-character, so we do word-by-word
+        words = text.split(' ')
+        line_buffer = []
+        
+        for word in words:
+            line_buffer.append(word)
+            await asyncio.sleep(delay)
+        
+        # Write the complete line at once
+        log.write(text)
+    
     def on_mount(self) -> None:
         """Initialize chat area and sync model indicator"""
         assistant = getattr(self.app, 'assistant', None)
@@ -224,7 +238,7 @@ class ChatArea(Container):
         
         try:
             timestamp = datetime.now().strftime("%H:%M:%S")
-            process_log.write(f"[cyan][{timestamp}] 📨 Processing {self.current_mode} request: {message}[/cyan]")
+            await self._write_with_typing(process_log, f"[cyan][{timestamp}] 📨 Processing {self.current_mode} request: {message}[/cyan]\n")
             
             # Get assistant from app
             assistant = getattr(self.app, 'assistant', None)
@@ -243,7 +257,7 @@ class ChatArea(Container):
             model_indicator.update(f"🤖 Model: {model_name}")
             
             if verbose:
-                process_log.write(f"[yellow]⚡ Using {model_name} model...[/yellow]")
+                await self._write_with_typing(process_log, f"[yellow]⚡ Using {model_name} model...[/yellow]\n")
             
             # Run in thread to avoid blocking
             if self.current_mode == "CHAT":
@@ -253,12 +267,12 @@ class ChatArea(Container):
                     message,
                     is_casual=True
                 )
-                process_log.write("[green]✅ Response generated[/green]")
+                await self._write_with_typing(process_log, "[green]✅ Response generated[/green]\n")
                 chat_history.mount(ChatMessage(ai_response, is_user=False))
                 
             elif self.current_mode in ["SCAN", "EXPLOIT"]:
                 # Tool execution mode
-                process_log.write(f"[yellow]🔧 Detecting required tool...[/yellow]")
+                await self._write_with_typing(process_log, f"[yellow]🔧 Detecting required tool...[/yellow]\n")
                 
                 # Get AI response to figure out what command to run
                 ai_response = await asyncio.to_thread(
@@ -279,15 +293,15 @@ class ChatArea(Container):
                 
                 if tool_name in assistant.tools:
                     tool = assistant.tools[tool_name]
-                    process_log.write(f"[green]✓ Selected tool: {tool_name}[/green]")
+                    await self._write_with_typing(process_log, f"[green]✓ Selected tool: {tool_name}[/green]\n")
                     
                     # Extract hostname if present
                     hostname = await asyncio.to_thread(assistant.extract_hostname, message)
                     if hostname:
-                        process_log.write(f"[cyan]🎯 Target: {hostname}[/cyan]")
+                        await self._write_with_typing(process_log, f"[cyan]🎯 Target: {hostname}[/cyan]\n")
                     
                     # Generate command
-                    process_log.write(f"[yellow]🔨 Generating {tool_name} command...[/yellow]")
+                    await self._write_with_typing(process_log, f"[yellow]🔨 Generating {tool_name} command...[/yellow]\n")
                     
                     # For metasploit, prepare scan context if we have previous scan results
                     if tool_name == "metasploit":
@@ -296,7 +310,7 @@ class ChatArea(Container):
                             hostname or assistant.last_target
                         )
                         if scan_context:
-                            process_log.write(f"[cyan]📊 Using scan results from previous nmap scan[/cyan]")
+                            await self._write_with_typing(process_log, f"[cyan]📊 Using scan results from previous nmap scan[/cyan]\n")
                         # Pass scan context to metasploit via the tool's attribute
                         tool._scan_context = scan_context
                     
@@ -332,10 +346,10 @@ class ChatArea(Container):
                             else:
                                 # Other tools that might return lists - join them
                                 command = ' && '.join(command)
-                                process_log.write(f"[cyan]📝 Command: {command}[/cyan]")
+                                await self._write_with_typing(process_log, f"[cyan]📝 Command: {command}[/cyan]\n")
                         else:
                             # String command (nmap, etc)
-                            process_log.write(f"[cyan]📝 Command: {command}[/cyan]")
+                            await self._write_with_typing(process_log, f"[cyan]📝 Command: {command}[/cyan]\n")
                         
                         # Check if sudo is required (only for string commands)
                         if isinstance(command, str) and command.strip().startswith('sudo '):
@@ -358,7 +372,7 @@ class ChatArea(Container):
                         elif isinstance(command, str):
                             # String command without sudo
                             process_log.write(f"[yellow]{'═' * 50}[/yellow]")
-                            process_log.write(f"[yellow]🚀 Executing {tool_name.upper()}...[/yellow]")
+                            await self._write_with_typing(process_log, f"[yellow]🚀 Executing {tool_name.upper()}...[/yellow]\n")
                             process_log.write(f"[yellow]{'═' * 50}[/yellow]")
                             # Execute command in thread
                             result = await asyncio.to_thread(tool.execute, command)
@@ -386,18 +400,18 @@ class ChatArea(Container):
                                         process_log.write(f"[cyan]  {line}[/cyan]")
                             
                             process_log.write(f"[yellow]{'═' * 50}[/yellow]")
-                            process_log.write(f"[green]✅ {tool_name.upper()} COMPLETED[/green]")
+                            await self._write_with_typing(process_log, f"[green]✅ {tool_name.upper()} COMPLETED[/green]\n")
                             process_log.write(f"[yellow]{'═' * 50}[/yellow]")
                             
                             # Get AI analysis
-                            process_log.write(f"[yellow]🧠 Analyzing results with {model_name}...[/yellow]")
+                            await self._write_with_typing(process_log, f"[yellow]🧠 Analyzing results with {model_name}...[/yellow]\n")
                             analysis = await asyncio.to_thread(
                                 assistant.ask_ai,
                                 message,
                                 output_to_analyze=result['stdout']
                             )
                             
-                            process_log.write("[green]✅ Analysis complete[/green]")
+                            await self._write_with_typing(process_log, "[green]✅ Analysis complete[/green]\n")
                             
                             # Display analysis in left panel (chat)
                             chat_history.mount(ChatMessage(analysis, is_user=False))
