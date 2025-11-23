@@ -136,7 +136,9 @@ class ChatArea(Container):
                         yield Checkbox("Auto-scroll", value=True, id="autoscroll-toggle")
                         yield Button("Clear", id="clear-logs", variant="warning", classes="small-btn")
                 
-                yield RichLog(highlight=True, markup=True, id="process-log", wrap=True)
+                process_log = RichLog(highlight=True, markup=True, id="process-log", wrap=True)
+                process_log.can_focus = True  # Make it focusable and selectable
+                yield process_log
                 with Horizontal(id="status-bar"):
                     yield LoadingIndicator(id="loading-spinner", classes="hidden")
                     yield Label("🟢 Ready", id="status-indicator")
@@ -313,6 +315,8 @@ class ChatArea(Container):
                             await self._write_with_typing(process_log, f"[cyan]📊 Using scan results from previous nmap scan[/cyan]\n")
                         # Pass scan context to metasploit via the tool's attribute
                         tool._scan_context = scan_context
+                        # Don't use progress callback to avoid execution issues
+                        tool.set_progress_callback(None)
                     
                     command = await asyncio.to_thread(tool.generate_command, message, ai_response)
                     
