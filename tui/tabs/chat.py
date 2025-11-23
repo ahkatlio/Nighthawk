@@ -50,7 +50,7 @@ class SudoPasswordScreen(ModalScreen):
             self.dismiss(self.password)
 
 
-class ChatMessage(Static):
+class ChatMessage(Container):
     """A single chat message widget"""
     
     def __init__(self, content: str, is_user: bool = True, timestamp: str = None):
@@ -58,19 +58,19 @@ class ChatMessage(Static):
         self.content = content
         self.is_user = is_user
         self.timestamp = timestamp or datetime.now().strftime("%H:%M:%S")
+        # Set the CSS class based on message type
+        self.add_class("user-message" if is_user else "ai-message")
     
     def compose(self) -> ComposeResult:
         """Compose the message layout"""
         role = "You" if self.is_user else "🦅 Nighthawk AI"
-        style = "user-message" if self.is_user else "ai-message"
         
-        with Container(classes=style):
-            yield Label(f"[{self.timestamp}] {role}", classes="message-header")
-            if self.is_user:
-                yield Label(self.content, classes="message-content")
-            else:
-                # AI messages support markdown
-                yield MarkdownWidget(self.content, classes="message-content")
+        yield Label(f"[{self.timestamp}] {role}", classes="message-header")
+        if self.is_user:
+            yield Label(self.content, classes="message-content")
+        else:
+            # AI messages support markdown
+            yield MarkdownWidget(self.content, classes="message-content")
 
 
 class ChatArea(Container):
