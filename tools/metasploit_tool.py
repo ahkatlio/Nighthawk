@@ -25,6 +25,11 @@ class MetasploitTool(BaseTool):
     def __init__(self):
         super().__init__(name="Metasploit Framework", command="msfconsole")
         self.description = "Find and run exploits using Metasploit Framework"
+        self._progress_callback = None  # For TUI progress updates
+    
+    def set_progress_callback(self, callback):
+        """Set callback function for progress updates in TUI mode"""
+        self._progress_callback = callback
     
     def get_local_ip(self, silent: bool = False) -> str:
         """Get the local IP address for LHOST"""
@@ -308,8 +313,23 @@ class MetasploitTool(BaseTool):
             services_to_exploit = self.parse_exploitation_plan(plan, scan_context)
             
             if not services_to_exploit:
-                console.print("[red]❌ No services could be extracted from plan[/red]")
-                return []
+                console.print("[yellow]⚠️ AI response couldn't be parsed, using fallback...[/yellow]")
+                # Fallback: if we have scan context, target all services
+                if scan_context and 'open_ports' in scan_context:
+                    console.print("[cyan]Using all services from scan results as targets[/cyan]")
+                    for port_info in scan_context['open_ports']:
+                        services_to_exploit.append({
+                            'port': port_info.get('port', ''),
+                            'service': port_info.get('service', 'unknown'),
+                            'version': port_info.get('version', ''),
+                            'attack_type': 'exploit',
+                            'reason': 'Automatic targeting (AI parsing failed)'
+                        })
+                
+                if not services_to_exploit:
+                    console.print("[red]❌ No services available for exploitation[/red]")
+                    console.print("[dim]Tip: Run an nmap scan first to gather target information[/dim]")
+                    return []
             
             console.print(f"\n[bold green]✓ Identified {len(services_to_exploit)} target(s) for exploitation[/bold green]\n")
             
@@ -320,13 +340,23 @@ class MetasploitTool(BaseTool):
             for i, service_info in enumerate(services_to_exploit, 1):
                 # Update progress at bottom
                 progress_percent = int((i / len(services_to_exploit)) * 100)
-                filled = int((i / len(services_to_exploit)) * 40)
-                empty = 40 - filled
-                bar = f"\033[92m{'█' * filled}\033[90m{'░' * empty}\033[0m"
                 
-                import sys
-                sys.stdout.write(f"\r[{bar}] {progress_percent}% \033[96m({i}/{len(services_to_exploit)}) {service_info['service']}:{service_info['port']}\033[0m")
-                sys.stdout.flush()
+                # Send progress update to TUI if callback is set
+                if self._progress_callback:
+                    self._progress_callback(
+                        current=i,
+                        total=len(services_to_exploit),
+                        message=f"Processing {service_info['service']}:{service_info['port']}"
+                    )
+                else:
+                    # CLI progress bar
+                    filled = int((i / len(services_to_exploit)) * 40)
+                    empty = 40 - filled
+                    bar = f"\033[92m{'█' * filled}\033[90m{'░' * empty}\033[0m"
+                    
+                    import sys
+                    sys.stdout.write(f"\r[{bar}] {progress_percent}% \033[96m({i}/{len(services_to_exploit)}) {service_info['service']}:{service_info['port']}\033[0m")
+                    sys.stdout.flush()
                 
                 # Search for real modules (silently)
                 modules = self.search_msf_modules(service_info['service'], service_info.get('version', ''), silent=True)
