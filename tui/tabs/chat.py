@@ -194,13 +194,16 @@ class ChatArea(Container):
         if assistant and hasattr(assistant, 'classify_intent'):
             self.current_mode = assistant.classify_intent(message)
         else:
-            # Fallback mode detection
+            # Fallback mode detection - only trigger tools with explicit commands
             msg_lower = message.lower()
-            if any(word in msg_lower for word in ['scan', 'nmap', 'port', 'host', 'enumerate']):
+            # Only trigger SCAN if user explicitly asks to scan a target
+            if any(phrase in msg_lower for phrase in ['scan ', 'nmap ', 'enumerate ', 'do a scan', 'run scan', 'perform scan']):
                 self.current_mode = "SCAN"
-            elif any(word in msg_lower for word in ['exploit', 'attack', 'hack', 'metasploit', 'pwn']):
+            # Only trigger EXPLOIT if user explicitly asks to exploit a target
+            elif any(phrase in msg_lower for phrase in ['exploit ', 'attack ', 'hack ', 'metasploit ', 'pwn ', 'do an exploit', 'run exploit']):
                 self.current_mode = "EXPLOIT"
             else:
+                # Default to CHAT for questions and general conversation
                 self.current_mode = "CHAT"
         
         # Update mode indicator
