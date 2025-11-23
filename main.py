@@ -129,11 +129,20 @@ class NighthawkAssistant:
     
     def detect_user_intent(self, user_request: str) -> str:
         """Use AI to determine if user wants to scan/exploit or just chat"""
-        intent_prompt = """You are an intent classifier. Analyze the message and respond with ONLY ONE WORD:
+        intent_prompt = """You are an intent classifier for a security assistant. Analyze the user's message and determine their intent.
 
-SCAN - if user wants network scanning, port detection, service enumeration
-EXPLOIT - if user wants to exploit, hack, penetrate, find vulnerabilities
-CHAT - if it's casual conversation, questions, greetings
+Respond with ONLY ONE WORD:
+
+SCAN - User wants to actively PERFORM a network scan, port scan, or service enumeration on a specific target
+Examples: "Scan 192.168.1.1", "Run nmap on example.com", "Check what ports are open on that server"
+
+EXPLOIT - User wants to actively EXECUTE an exploit, attack, or penetration test on a target
+Examples: "Exploit vsftpd on that server", "Hack the target", "Use metasploit to attack", "Run the exploit"
+
+CHAT - User is asking questions, having conversation, or seeking information WITHOUT wanting to execute tools
+Examples: "What is port 80 used for?", "Which port is most dangerous?", "How does nmap work?", "Tell me about SQL injection"
+
+Key distinction: Questions ABOUT security = CHAT. Commands to DO security actions = SCAN/EXPLOIT.
 
 User message: """
         
@@ -143,7 +152,7 @@ User message: """
                 # For Gemini, create a new temporary chat for classification
                 temp_model = genai.GenerativeModel(
                     model_name="gemini-2.5-flash",
-                    system_instruction="You are an intent classifier. Respond with only: SCAN, EXPLOIT, or CHAT"
+                    system_instruction="You are an intent classifier. Respond with only: SCAN, EXPLOIT, or CHAT. Questions about security = CHAT. Commands to execute tools = SCAN or EXPLOIT."
                 )
                 temp_chat = temp_model.start_chat(history=[])
                 response = temp_chat.send_message(intent_prompt + user_request)
@@ -153,7 +162,7 @@ User message: """
                 response = ollama.chat(
                     model=self.model,
                     messages=[
-                        {"role": "system", "content": "You are an intent classifier. Respond with ONLY one word: SCAN, EXPLOIT, or CHAT"},
+                        {"role": "system", "content": "You are an intent classifier. Respond with ONLY one word: SCAN, EXPLOIT, or CHAT. Questions about security = CHAT. Commands to execute tools = SCAN or EXPLOIT."},
                         {"role": "user", "content": intent_prompt + user_request}
                     ]
                 )
@@ -232,6 +241,10 @@ User message: """
             return 'SCAN'
         
         return 'CHAT'
+    
+    def classify_intent(self, user_request: str) -> str:
+        """Alias for detect_user_intent - used by TUI for compatibility"""
+        return self.detect_user_intent(user_request)
     
     def detect_tool(self, user_request: str, ai_response: str) -> Optional[str]:
         """Detect which tool to use based on request and AI response"""
