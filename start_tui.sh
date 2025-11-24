@@ -173,6 +173,84 @@ echo -e "\n${MAGENTA}${BOLD}═════════════════�
 echo -e "${GREEN}${BOLD}✓ All checks complete!${NC}"
 echo -e "${MAGENTA}${BOLD}════════════════════════════════════════════════════════${NC}\n"
 
+sleep 1
+
+# Clear screen for matrix effect
+clear
+tput civis  # Hide cursor
+
+cols=$(tput cols)
+rows=$(tput lines)
+
+# NIGHTHAWK ASCII art
+declare -a nighthawk_art=(
+"███╗   ██╗██╗ ██████╗ ██╗  ██╗████████╗██╗  ██╗ █████╗ ██╗    ██╗██╗  ██╗"
+"████╗  ██║██║██╔════╝ ██║  ██║╚══██╔══╝██║  ██║██╔══██╗██║    ██║██║ ██╔╝"
+"██╔██╗ ██║██║██║  ███╗███████║   ██║   ███████║███████║██║ █╗ ██║█████╔╝ "
+"██║╚██╗██║██║██║   ██║██╔══██║   ██║   ██╔══██║██╔══██║██║███╗██║██╔═██╗ "
+"██║ ╚████║██║╚██████╔╝██║  ██║   ██║   ██║  ██║██║  ██║╚███╔███╔╝██║  ██╗"
+"╚═╝  ╚═══╝╚═╝ ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝ ╚══╝╚══╝ ╚═╝  ╚═╝"
+)
+
+# Calculate centered position
+art_height=${#nighthawk_art[@]}
+art_width=${#nighthawk_art[0]}
+start_row=$(((rows - art_height) / 2))
+start_col=$(((cols - art_width) / 2))
+
+# Matrix characters for rain
+chars=(0 1 2 3 4 5 6 7 8 9 A B C D E F G H I J K L M N O P Q R S T U V W X Y Z)
+
+# Store already placed characters to avoid clearing them
+declare -A placed_chars
+
+# Characters fall and form the text
+for ((line=0; line<art_height; line++)); do
+    text="${nighthawk_art[$line]}"
+    target_row=$((start_row + line))
+    
+    # Process each character position in this line
+    for ((col_offset=0; col_offset<${#text}; col_offset++)); do
+        final_char="${text:$col_offset:1}"
+        target_col=$((start_col + col_offset))
+        
+        # Skip spaces
+        if [ "$final_char" = " " ]; then
+            continue
+        fi
+        
+        # Make character fall from top to target position
+        for ((fall_row=0; fall_row<=target_row; fall_row++)); do
+            # Show random character while falling
+            if [ $fall_row -lt $target_row ]; then
+                # Check if this position has a placed character - don't overwrite
+                key="${fall_row}_${target_col}"
+                if [ -z "${placed_chars[$key]}" ]; then
+                    random_char=${chars[$((RANDOM % ${#chars[@]}))]}
+                    tput cup $fall_row $target_col
+                    echo -ne "\033[32m$random_char\033[0m"
+                    # Clear it only if no placed character
+                    tput cup $fall_row $target_col
+                    echo -ne " "
+                fi
+            else
+                # Final position - show actual character
+                tput cup $target_row $target_col
+                echo -ne "\033[92m$final_char\033[0m"
+                # Mark this position as placed
+                placed_chars["${target_row}_${target_col}"]=1
+            fi
+        done
+    done
+done
+
+# Hold for 1 second
+sleep 1
+
+# Cleanup
+tput cnorm
+clear
+
 echo -e "${CYAN}${BOLD}Launching Nighthawk TUI...${NC}"
 echo -e "${DIM}Press Ctrl+C to exit the TUI${NC}\n"
 
