@@ -350,17 +350,6 @@ This project is licensed under the **MIT License**.
 
 ---
 
-## 🙏 Acknowledgments
-
-- **Ollama Team** - Local AI inference engine
-- **Google Gemini** - Advanced language models
-- **Nmap Project** - Network reconnaissance framework
-- **Metasploit Framework** - Exploitation platform
-- **Textual** - Modern TUI framework
-- **Arch Linux Community** - Best rolling release distro
-
----
-
 ## 📞 Support
 
 - **Issues**: [GitHub Issues](https://github.com/ahkatlio/Nighthawk/issues)
