@@ -230,7 +230,7 @@ You: quit
 ### TUI Navigation
 
 - **Tab**: Switch between Chat, Scan, and Settings
-- **Ctrl+P**: Exit Nighthawk
+- **Ctrl+Q**: Exit Nighthawk
 - **Enter**: Send message/command
 - **↑/↓**: Navigate command history
 
