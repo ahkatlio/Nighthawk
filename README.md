@@ -95,9 +95,12 @@ yay -S metasploit
 
 # 6. Setup Nighthawk
 cd ~/Documents/Nighthawk
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+
+# Run automated installer
+python install.py
+
+# Make launch scripts executable
+chmod +x start_tui.sh start.sh
 
 # 7. Configure Google Gemini (optional, for enhanced AI)
 # Create .env file and add: GOOGLE_API_KEY=your_key_here
@@ -109,7 +112,7 @@ pip install -r requirements.txt
 # Check Ollama
 ollama list
 
-# Test Nighthawk
+# Test Nighthawk TUI
 ./start_tui.sh
 ```
 
