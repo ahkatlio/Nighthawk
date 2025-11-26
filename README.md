@@ -1,483 +1,364 @@
 # 🦅 Nighthawk Security Assistant
 
-> **AI-powered modular security tool orchestrator leveraging Ollama and professional penetration testing frameworks**
+<div align="center">
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![Arch Linux](https://img.shields.io/badge/Arch-Linux-1793D1?logo=arch-linux)](https://archlinux.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-00ff00.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-00ff00.svg)](https://www.python.org/downloads/)
+[![Arch Linux](https://img.shields.io/badge/Arch-Linux-00ff00?logo=arch-linux)](https://archlinux.org/)
 
-An intelligent security assistant that translates natural language requests into professional penetration testing workflows. Built with a modular architecture for extensibility and powered by Ollama for intelligent command generation and result analysis.
+**AI-Powered Penetration Testing Framework**
+
+*Transform natural language into professional security assessments*
+
+[Features](#-features) • [Installation](#-installation) • [Usage](#-usage-guide) • [Tools](#-integrated-tools)
+
+</div>
+
+---
+
+## ✨ What is Nighthawk?
+
+Nighthawk is an intelligent security assistant that bridges the gap between conversational input and professional penetration testing. Simply describe what you want to accomplish, and Nighthawk translates your intent into precise security commands, executes them, and provides AI-powered analysis of the results.
+
+**Powered by:**
+- 🤖 **Ollama** - Local AI inference for intelligent command generation
+- 🎯 **Google Gemini** - Advanced natural language understanding
+- 🔧 **Modular Architecture** - Plugin-based tool system for extensibility
 
 ---
 
 ## 🚀 Features
 
-### Core Capabilities
+### 🎨 Beautiful TUI Interface
+- **Terminal User Interface** - Sleek, responsive design with real-time updates
+- **Matrix Rain Animation** - Eye-catching startup sequence
+- **Tabbed Navigation** - Switch between Chat, Scan, and Settings views
+- **Syntax Highlighting** - Color-coded output for better readability
 
-- **🤖 Natural Language Interface**: Translate conversational requests into precise security commands
-- **🔧 Modular Architecture**: Plugin-based tool system for easy extensibility
-- **🎯 Intelligent Execution**: Context-aware command generation with automatic error correction
-- **🧠 Memory System**: Session-based scan result caching for multi-stage assessments
-- **📊 AI-Powered Analysis**: Automated vulnerability assessment and actionable recommendations
-- **🔒 Privacy-First**: All data stored in-memory only, auto-deleted on exit
+### 🧠 Intelligent Command Processing
+- **Natural Language Interface** - Talk naturally, no need to memorize commands
+- **Context-Aware** - Remembers previous scans and builds on them
+- **Auto-Correction** - Smart error handling and command refinement
+- **Intent Classification** - Automatically distinguishes between chat and security operations
 
-### Integrated Tools
+### 🔒 Security & Privacy
+- **In-Memory Processing** - All data stored temporarily, wiped on exit
+- **Local AI** - Ollama runs entirely on your machine
+- **No External Logging** - Your security assessments stay private
 
-#### ✅ Nmap - Network Intelligence
-- Service enumeration and version detection
-- OS fingerprinting with auto-privilege escalation
-- Smart hostname extraction from URLs
-- Automatic `-Pn` flag injection for filtered hosts
-- Structured data parsing for downstream tool integration
-
-#### ✅ Metasploit Framework - Exploitation Engine
-- Context-aware exploit matching using previous scan data
-- Automated resource script generation
-- Multi-stage attack orchestration
-- Real-time exploit execution with AI guidance
+### 🛠️ Professional Tooling
+- **Nmap Integration** - Network scanning with intelligent flag management
+- **Metasploit Framework** - Context-aware exploit matching
+- **More Tools Coming Soon** - SQLMap, Nikto, Gobuster, Hydra, and more!
 
 ---
 
 ## 📋 Prerequisites
 
 ### System Requirements
-- **OS**: Arch Linux (or Arch-based distributions)
+- **OS**: Arch Linux (or Arch-based: Manjaro, EndeavourOS, Garuda)
 - **Python**: 3.8 or higher
-- **RAM**: 4GB minimum (8GB recommended for Ollama)
-- **Disk**: 5GB free space for models and tools
+- **RAM**: 8GB recommended (4GB minimum)
+- **Disk**: 5GB free space
 
-### Required Packages
-
-The following tools must be installed on your system:
-
-1. **Ollama** - AI inference engine
-2. **Nmap** - Network scanner
-3. **Metasploit Framework** - Exploitation framework (optional but recommended)
-4. **Python 3** - Runtime environment
+> 💡 **Note**: Ubuntu/Debian support is planned for future releases
 
 ---
 
-## 🔧 Installation
+## ⚡ Installation
 
-### For Arch Linux / Manjaro / EndeavourOS
-
-#### 1. Install System Dependencies
+### Quick Setup (Arch Linux)
 
 ```bash
-# Update system
+# 1. Update system
 sudo pacman -Syu
 
-# Install Python and pip
-sudo pacman -S python python-pip
+# 2. Install core dependencies
+sudo pacman -S python python-pip nmap
 
-# Install Nmap
-sudo pacman -S nmap
-
-# Install Metasploit Framework (from BlackArch or AUR)
-# Option A: Using BlackArch repository (recommended)
-curl -O https://blackarch.org/strap.sh
-chmod +x strap.sh
-sudo ./strap.sh
-sudo pacman -S metasploit
-
-# Option B: Using AUR (alternative)
-yay -S metasploit
-# or
-paru -S metasploit
-```
-
-#### 2. Install Ollama
-
-```bash
-# Install Ollama (official method)
+# 3. Install Ollama
 curl -fsSL https://ollama.com/install.sh | sh
-
-# Alternative: Install from AUR
-yay -S ollama
-# or
-paru -S ollama
-
-# Start Ollama service
 sudo systemctl enable ollama
 sudo systemctl start ollama
 
-# Pull the AI model
+# 4. Pull AI model
 ollama pull dolphin-llama3:8b
-```
 
-#### 3. Setup Nighthawk
+# 5. Install Metasploit (optional but recommended)
+# Using BlackArch repository
+curl -O https://blackarch.org/strap.sh
+chmod +x strap.sh && sudo ./strap.sh
+sudo pacman -S metasploit
 
-```bash
-# Clone or navigate to Nighthawk directory
+# Or using AUR
+yay -S metasploit
+
+# 6. Setup Nighthawk
 cd ~/Documents/Nighthawk
-
-# Create Python virtual environment
 python -m venv .venv
-
-# Activate virtual environment
 source .venv/bin/activate
-
-# Install Python dependencies
 pip install -r requirements.txt
+
+# 7. Configure Google Gemini (optional, for enhanced AI)
+# Create .env file and add: GOOGLE_API_KEY=your_key_here
 ```
 
-#### 4. Verify Installation
+### Verify Installation
 
 ```bash
-# Check Ollama is running
-systemctl status ollama
-
-# Test Ollama
+# Check Ollama
 ollama list
 
-# Verify Nmap
-nmap --version
-
-# Verify Metasploit (optional)
-msfconsole --version
-
-# Check Python environment
-python --version
+# Test Nighthawk
+./start_tui.sh
 ```
 
 ---
 
-## 🎯 Quick Start
+## 🎯 Usage Guide
 
-### Launch Nighthawk
+### Launching Nighthawk
 
 ```bash
-# Make sure you're in the Nighthawk directory
-cd ~/Documents/Nighthawk
+# Terminal User Interface (Recommended)
+./start_tui.sh
 
-# Run the launcher script
+# Command-Line Interface
 ./start.sh
 ```
 
-### First Commands
+### 💬 Chat Tab - Conversational Interface
+
+Ask questions, get help, or have casual conversations:
 
 ```
-You: scan scanme.nmap.org
-→ Performs network reconnaissance
+You: What tools do you have available?
+Nighthawk: I have integrated Nmap for network scanning and Metasploit for exploitation...
 
-You: exploit that target
-→ Searches for applicable exploits based on scan results
+You: How do I scan a website?
+Nighthawk: Simply say "scan example.com" and I'll perform reconnaissance...
 
-You: tools
-→ Lists all integrated security tools
-
-You: quit
-→ Exits and clears all session data
+You: What vulnerabilities did you find?
+Nighthawk: Based on the last scan, I found SSH running on port 22...
 ```
 
----
+### 🔍 Scan Tab - Security Operations
 
-## 💡 Usage Examples
-
-### Basic Reconnaissance
-
-```
-You: scan https://example.com for open ports
-→ Extracts hostname: example.com
-→ Executes: nmap -Pn -sV example.com
-→ Displays results with AI-powered vulnerability analysis
-```
-
-### Fast Local Network Scan
-
-```
-You: quick scan of 192.168.1.0/24
-→ Executes: nmap -Pn -F 192.168.1.0/24
-→ Identifies active hosts and common services
-```
-
-### Multi-Stage Attack Workflow
+Perform actual security assessments:
 
 ```bash
-# Stage 1: Reconnaissance
-You: scan target.com
-→ 🔍 Nmap discovers: SSH (22/OpenSSH 7.4), HTTP (80/Apache 2.4.6), MySQL (3306/5.7.33)
+# Basic Network Scan
+scan scanme.nmap.org
+
+# Fast Local Network Discovery
+quick scan 192.168.1.0/24
+
+# Comprehensive Scan with Service Detection
+scan example.com with version detection
+
+# OS Fingerprinting (requires sudo)
+scan target.com and detect OS
+
+# Extract from URL
+scan https://example.com/path
+→ Automatically extracts hostname: example.com
+```
+
+### 💥 Multi-Stage Assessment Workflow
+
+**Stage 1: Reconnaissance**
+```
+You: scan target.example.com
+→ 🔍 Discovers: SSH (22), HTTP (80/Apache 2.4.6), MySQL (3306/5.7.33)
 → Results cached in session memory
+```
 
-# Stage 2: Exploit Discovery
-You: find exploits for mysql
-→ 💥 Metasploit searches CVE database using cached MySQL version
-→ Identifies applicable exploits: mysql_login, mysql_enum, etc.
+**Stage 2: Analysis**
+```
+You: What vulnerabilities did you find?
+→ 💬 AI analyzes results and identifies potential risks
+→ Suggests next steps
+```
 
-# Stage 3: Execution (with proper authorization)
+**Stage 3: Exploitation (Authorized Only!)**
+```
+You: find exploits for mysql version 5.7.33
+→ 💥 Searches Metasploit database
+→ Lists applicable exploits with descriptions
+
 You: exploit that target
-→ 🎯 Attempts exploitation using discovered vulnerabilities
-→ Real-time progress monitoring
+→ 🎯 Launches exploitation workflow
+→ Real-time progress updates
+```
 
-# Stage 4: Exit
+**Stage 4: Clean Exit**
+```
 You: quit
 → 🧹 All session data securely wiped from memory
 ```
 
-### Conversational Interface
+### ⚙️ Settings Tab
 
-Nighthawk intelligently distinguishes between security operations and casual conversation:
-
-```
-You: hey, my name is Alice
-→ 💬 Chat mode: "Hello Alice! How can I help with security testing today?"
-
-You: scan example.com
-→ 🔍 Scan mode: Initiates nmap reconnaissance
-
-You: what tools do you have?
-→ 💬 Chat mode: Lists available tools with descriptions
-
-You: exploit that website
-→ 🔍 Scan mode: Begins exploitation workflow
-```
+- **View Configuration** - Check current AI models and API settings
+- **Model Selection** - Switch between Ollama and Gemini
+- **Theme Options** - Customize TUI appearance (coming soon)
 
 ---
 
-## 📁 Project Architecture
+## 🛠️ Integrated Tools
 
-```
-Nighthawk/
-├── main.py                    # Core orchestrator and AI controller
-├── tools/                     # Modular tool implementations
-│   ├── __init__.py
-│   ├── base_tool.py          # Abstract base class for all tools
-│   ├── nmap_tool.py          # Nmap integration ✅
-│   ├── metasploit_tool.py    # Metasploit Framework integration ✅
-│   └── nikto_tool.py         # Nikto template (coming soon)
-├── start.sh                   # Launcher script
-├── requirements.txt           # Python dependencies
-├── .venv/                     # Virtual environment (auto-generated)
-└── README.md                  # This file
-```
+| Tool | Status | Description |
+|------|--------|-------------|
+| **Nmap** | ✅ Active | Network scanning, service detection, OS fingerprinting |
+| **Metasploit** | ✅ Active | Vulnerability exploitation, payload generation |
+| **SQLMap** | 🔜 Soon | SQL injection detection and exploitation |
+| **Nikto** | 🔜 Soon | Web server vulnerability scanning |
+| **Gobuster** | 🔜 Soon | Directory and file enumeration |
+| **Hydra** | 🔜 Soon | Network authentication cracking |
+| **WPScan** | 🔜 Soon | WordPress security scanner |
+| **Burp Suite** | 🔜 Soon | Web application security testing |
 
-### Tool Status
-
-| Tool | Status | Features |
-|------|--------|----------|
-| **Nmap** | ✅ Production | Network scanning, service detection, OS fingerprinting, auto-sudo, smart flags |
-| **Metasploit** | ✅ Production | Context-aware exploits, resource scripts, automated targeting |
-| **Nikto** | 🚧 Planned | Web server vulnerability scanning |
-| **SQLmap** | 🚧 Planned | SQL injection detection and exploitation |
-| **Gobuster** | 🚧 Planned | Directory/file enumeration |
-| **Hydra** | 🚧 Planned | Network authentication cracking |
+> 💡 More tools are being integrated regularly. Check back for updates!
 
 ---
 
-## 🛠️ Development
+## 🎨 Interface Features
 
-### Adding Custom Tools
+### TUI Navigation
 
-Nighthawk's modular architecture makes it simple to integrate new security tools:
+- **Tab**: Switch between Chat, Scan, and Settings
+- **Ctrl+C**: Exit Nighthawk
+- **Enter**: Send message/command
+- **↑/↓**: Navigate command history
 
-#### 1. Create Tool Module
+### Command Recognition
 
-Create a new file in `tools/your_tool.py`:
-
-```python
-from .base_tool import BaseTool
-import subprocess
-import re
-
-class YourTool(BaseTool):
-    """Your security tool integration"""
-    
-    def __init__(self):
-        super().__init__(
-            name="yourtool",
-            command="yourtool"
-        )
-    
-    def check_installed(self) -> bool:
-        """Verify tool is installed"""
-        try:
-            subprocess.run([self.command, "--version"], 
-                         capture_output=True, check=True)
-            return True
-        except (subprocess.CalledProcessError, FileNotFoundError):
-            return False
-    
-    def get_ai_prompt(self) -> str:
-        """AI instruction for command generation"""
-        return """You are an expert with YourTool.
-Generate appropriate YourTool commands based on user requests.
-Return ONLY the command, no explanations."""
-    
-    def generate_command(self, user_request: str, ai_context: str = None) -> str:
-        """Generate tool command from user request"""
-        # Your command generation logic
-        return f"{self.command} -flag target"
-    
-    def execute(self, command: str) -> dict:
-        """Execute the tool command"""
-        return self.run_command(command)
-    
-    def format_output(self, result: dict, command: str):
-        """Format and display results"""
-        # Custom output formatting
-        pass
-```
-
-#### 2. Register Tool
-
-Add to `main.py` in the `_register_tools()` method:
-
-```python
-def _register_tools(self):
-    # ... existing tools ...
-    
-    # Add your tool
-    from tools.your_tool import YourTool
-    yourtool = YourTool()
-    self.tools['yourtool'] = yourtool
-```
-
-#### 3. Test Integration
+Nighthawk intelligently understands intent:
 
 ```bash
-./start.sh
-You: yourtool scan example.com
+# These all trigger network scanning:
+"scan example.com"
+"check example.com for vulnerabilities"
+"run nmap on example.com"
+"do reconnaissance on example.com"
+
+# These trigger chat mode:
+"what is nmap?"
+"how do I use this tool?"
+"what did the scan find?"
 ```
 
 ---
 
 ## 🐛 Troubleshooting
 
-### Ollama Not Running
+### Ollama Not Responding
 
 ```bash
-# Check service status
 systemctl status ollama
-
-# Start service
 sudo systemctl start ollama
-
-# Enable auto-start
-sudo systemctl enable ollama
+ollama list
 ```
 
-### Model Not Found
+### Missing AI Model
 
 ```bash
-# List installed models
-ollama list
-
-# Pull required model
 ollama pull dolphin-llama3:8b
 ```
 
-### Permission Denied for Nmap
+### Permission Issues with Nmap
 
-Some nmap scans require root privileges. Nighthawk automatically adds `sudo` when needed:
-
+Nighthawk automatically adds `sudo` for privileged scans:
 ```
 You: scan example.com with OS detection
-→ Executes: sudo nmap -Pn -O example.com
-→ Prompts for password if required
-```
-
-### Metasploit Database Issues
-
-```bash
-# Initialize Metasploit database
-sudo msfdb init
-
-# Check database status
-sudo msfdb status
-
-# Reinitialize if needed
-sudo msfdb reinit
+→ Executes: sudo nmap -O example.com
+→ Prompts for password
 ```
 
 ### Python Dependencies
 
 ```bash
-# Ensure virtual environment is activated
 source .venv/bin/activate
-
-# Reinstall dependencies
 pip install -r requirements.txt --force-reinstall
 ```
 
 ---
 
-## ⚠️ Security & Legal Notice
+## ⚠️ Legal & Ethical Use
 
-### Responsible Use
+<div align="center">
 
-**Nighthawk is a penetration testing tool designed for security professionals and authorized security assessments.**
+**🚨 IMPORTANT: Only use on systems you own or have explicit written permission to test 🚨**
 
-⚠️ **IMPORTANT**:
-- Only use on systems you **own** or have **explicit written permission** to test
-- Unauthorized access to computer systems is **illegal** in most jurisdictions
-- The developers assume **no liability** for misuse of this tool
-- Always follow responsible disclosure practices
+</div>
 
-### Data Privacy
+### Responsible Security Testing
 
-- All scan results and conversation history are stored **in-memory only**
-- Data is **automatically deleted** when you exit Nighthawk
-- No persistent logs or data files are created (unless explicitly configured)
-- Session data is not transmitted externally (except to local Ollama instance)
+- ✅ Authorized penetration testing with signed agreements
+- ✅ Personal lab environments and practice targets
+- ✅ Bug bounty programs with defined scope
+- ❌ Unauthorized network scanning
+- ❌ Exploitation without permission
+- ❌ Malicious activities
 
-### Compliance
+### Privacy Commitment
 
-Ensure compliance with:
-- Computer Fraud and Abuse Act (CFAA) - United States
-- Computer Misuse Act - United Kingdom  
-- Local cybersecurity and data protection regulations
-- Your organization's security policies
+- 🔒 All scan results stored in-memory only
+- 🔒 Data automatically deleted on exit
+- 🔒 No persistent logs unless configured
+- 🔒 Local AI processing (Ollama)
+
+---
+
+## 📦 Project Structure
+
+```
+Nighthawk/
+├── main.py                    # Core AI orchestrator
+├── main_TUI.py               # Terminal user interface
+├── tui/                       # TUI components
+│   ├── tabs/                  # Chat, Scan, Settings tabs
+│   └── widgets/              # Custom UI elements
+├── tools/                     # Security tool integrations
+│   ├── nmap_tool.py          # Nmap wrapper
+│   └── metasploit_tool.py    # Metasploit integration
+├── start.sh                   # CLI launcher
+├── start_tui.sh              # TUI launcher with animation
+└── requirements.txt           # Python dependencies
+```
 
 ---
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please follow these guidelines:
+Contributions are welcome! To contribute:
 
-1. **Fork** the repository
-2. Create a **feature branch** (`git checkout -b feature/amazing-tool`)
-3. **Commit** your changes (`git commit -m 'Add YourTool integration'`)
-4. **Push** to the branch (`git push origin feature/amazing-tool`)
-5. Open a **Pull Request**
-
-### Development Setup
-
-```bash
-# Clone repository
-git clone https://github.com/ahkatlio/Nighthawk.git
-cd Nighthawk
-
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate
-
-# Install development dependencies
-pip install -r requirements.txt
-pip install pytest black flake8
-
-# Run tests (when available)
-pytest tests/
-```
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/new-tool`)
+3. Commit changes (`git commit -m 'Add new security tool'`)
+4. Push to branch (`git push origin feature/new-tool`)
+5. Open a Pull Request
 
 ---
 
 ## 📝 License
 
-This project is licensed under the **MIT License** - see the LICENSE file for details.
+This project is licensed under the **MIT License**.
 
 ---
 
 ## 🙏 Acknowledgments
 
-- **Ollama** - Local AI inference engine
-- **Nmap Project** - Network scanning framework
+- **Ollama Team** - Local AI inference engine
+- **Google Gemini** - Advanced language models
+- **Nmap Project** - Network reconnaissance framework
 - **Metasploit Framework** - Exploitation platform
-- **Rich** - Terminal formatting library
-- **Arch Linux Community** - Package management and support
+- **Textual** - Modern TUI framework
+- **Arch Linux Community** - Best rolling release distro
 
 ---
 
-## 📞 Contact & Support
+## 📞 Support
 
 - **Issues**: [GitHub Issues](https://github.com/ahkatlio/Nighthawk/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/ahkatlio/Nighthawk/discussions)
@@ -485,6 +366,17 @@ This project is licensed under the **MIT License** - see the LICENSE file for de
 
 ---
 
-**🚀 Ready to begin? Run: `./start.sh`**
+<div align="center">
+
+**🚀 Ready to begin?**
+
+```bash
+./start_tui.sh
+```
 
 *Stay ethical. Stay legal. Stay curious.* 🦅
+
+**Made with ❤️ for the Arch Linux community**
+
+</div>
+
