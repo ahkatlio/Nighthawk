@@ -70,20 +70,8 @@ if command_exists systemctl && command_exists ollama; then
     echo ""
 fi
 
-# Pre-flight checks
-echo -e "${CYAN}${BOLD}[1/5]${NC} ${WHITE}Performing system checks...${NC}"
-
-# Check Python
-if command_exists python3; then
-    PYTHON_VERSION=$(python3 --version | cut -d' ' -f2)
-    print_status 0 "Python ${PYTHON_VERSION} detected"
-else
-    print_status 1 "Python 3 not found"
-    exit 1
-fi
-
-# Check virtual environment
-echo -e "\n${CYAN}${BOLD}[2/5]${NC} ${WHITE}Setting up Python environment...${NC}"
+# Check virtual environment FIRST - before any Python checks
+echo -e "${CYAN}${BOLD}[1/5]${NC} ${WHITE}Setting up Python environment...${NC}"
 
 if [ -d ".venv" ]; then
     print_status 0 "Virtual environment found"
@@ -98,6 +86,18 @@ else
     echo -e "${DIM}  Tip: Create one with 'python3 -m venv .venv'${NC}"
 fi
 
+# Pre-flight checks - now using venv's Python if available
+echo -e "\n${CYAN}${BOLD}[2/5]${NC} ${WHITE}Performing system checks...${NC}"
+
+# Check Python (now from venv if activated)
+if command_exists python3; then
+    PYTHON_VERSION=$(python3 --version | cut -d' ' -f2)
+    print_status 0 "Python ${PYTHON_VERSION} detected"
+else
+    print_status 1 "Python 3 not found"
+    exit 1
+fi
+
 # Check dependencies
 echo -e "\n${CYAN}${BOLD}[3/5]${NC} ${WHITE}Verifying dependencies...${NC}"
 
@@ -107,11 +107,11 @@ if python3 -c "import textual" 2>/dev/null; then
 else
     print_status 1 "Textual not found"
     echo -e "${YELLOW}Installing Textual...${NC}"
-    pip install textual -q
+    python3 -m pip install textual -q
     if [ $? -eq 0 ]; then
         print_status 0 "Textual installed successfully"
     else
-        echo -e "${RED}Failed to install Textual. Please run: pip install textual${NC}"
+        echo -e "${RED}Failed to install Textual. Please run: python3 -m pip install textual${NC}"
         exit 1
     fi
 fi
