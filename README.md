@@ -34,7 +34,11 @@ Nighthawk is an intelligent security assistant that bridges the gap between conv
 - **Matrix Rain Animation** - Eye-catching startup sequence
 - **Tabbed Navigation** - Switch between Chat, Scan, and Settings views
 - **Syntax Highlighting** - Color-coded output for better readability
-- **Text-to-Speech** - AI responses with natural-sounding voices (Edge-TTS)
+- **Text-to-Speech** - AI responses with natural-sounding voices
+  - 🔊 Microsoft Edge Neural Voices (8 voice options: US, UK, AU, CA)
+  - ⚡ Adjustable speech rate (-50% to +50%)
+  - 🎯 Smart chunking for seamless playback
+  - ⏹️ Instant stop with Ctrl+W hotkey
 
 ### 🧠 Intelligent Command Processing
 - **Natural Language Interface** - Talk naturally, no need to memorize commands
@@ -208,7 +212,44 @@ You: quit
 
 - **View Configuration** - Check current AI models and API settings
 - **Model Selection** - Switch between Ollama and Gemini
+- **Text-to-Speech Settings** - Configure voice output
+  - Enable/disable TTS with toggle switch
+  - Choose from 8 different voices (male/female, various accents)
+  - Adjust speech rate from -50% (slower) to +50% (faster)
 - **Theme Options** - Customize TUI appearance (coming soon)
+
+### 🔊 Text-to-Speech Features
+
+**Enable Voice Output:**
+1. Navigate to Settings tab (Ctrl+2)
+2. Toggle the TTS switch to ON
+3. Select your preferred voice from the dropdown
+4. Adjust speech rate with the slider (default: 0%)
+
+**Voice Options:**
+- 🇺🇸 English (US) - Aria [Female] / Guy [Male]
+- 🇬🇧 English (UK) - Sonia [Female] / Ryan [Male]
+- 🇦🇺 English (AU) - Natasha [Female] / William [Male]
+- 🇨🇦 English (CA) - Clara [Female] / Liam [Male]
+
+**Playback Controls:**
+- Audio starts automatically when AI responds (if TTS enabled)
+- Press **Ctrl+W** anytime to stop audio playback
+- Audio processes in background - UI remains responsive
+- Seamless chunking for long responses (no gaps between chunks)
+
+**How It Works:**
+```
+AI Response Generated → Text Cleaned (markdown removed)
+    ↓
+Split into Smart Chunks (adapts to speech rate)
+    ↓
+Parallel Generation (3 workers using Edge-TTS)
+    ↓
+Sequential Playback (smooth, gap-free audio)
+    ↓
+Ctrl+W = Instant Stop + Cleanup
+```
 
 ---
 
@@ -233,10 +274,13 @@ You: quit
 
 ### TUI Navigation
 
-- **Tab**: Switch between Chat, Scan, and Settings
+- **Ctrl+1**: Switch to Chat tab
+- **Ctrl+2**: Switch to Settings tab
+- **Ctrl+W**: Stop audio playback (TTS)
 - **Ctrl+Q**: Exit Nighthawk
 - **Enter**: Send message/command
 - **↑/↓**: Navigate command history
+- **Tab**: Switch focus between widgets
 
 ### Command Recognition
 
@@ -288,6 +332,29 @@ You: scan example.com with OS detection
 source .venv/bin/activate
 pip install -r requirements.txt --force-reinstall
 ```
+
+### Text-to-Speech Not Working
+
+```bash
+# Check if edge-tts is installed
+pip list | grep edge-tts
+
+# Install/upgrade edge-tts
+pip install --upgrade edge-tts
+
+# Check audio player (mpv recommended)
+which mpv
+sudo pacman -S mpv
+
+# Test edge-tts directly
+edge-tts --text "Test audio" --write-media test.mp3
+mpv test.mp3
+```
+
+**Common TTS Issues:**
+- No audio output → Install `mpv` or `ffplay`
+- Audio stops mid-sentence → Check internet connection (Edge-TTS requires online access)
+- Ctrl+W not working → Update to latest version (fixed in v1.2+)
 
 ---
 
