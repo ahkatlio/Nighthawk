@@ -1,8 +1,3 @@
-"""
-Clear Command
-Clear conversation history and scan results
-"""
-
 from .base_command import BaseCommand
 
 class ClearCommand(BaseCommand):
@@ -16,12 +11,10 @@ class ClearCommand(BaseCommand):
         )
     
     def execute(self, assistant, args: list) -> str:
-        """Execute clear command"""
         from rich.console import Console
         
         console = Console()
         
-        # Determine what to clear
         target = args[0].lower() if args else "all"
         
         if target in ["history", "all"]:
