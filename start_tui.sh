@@ -1,8 +1,3 @@
-#!/bin/bash
-
-# Nighthawk TUI Launcher
-# Advanced Terminal User Interface for Nighthawk Security Assistant
-
 # Color codes
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -11,21 +6,13 @@ BLUE='\033[0;34m'
 MAGENTA='\033[0;35m'
 CYAN='\033[0;36m'
 WHITE='\033[1;37m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 BOLD='\033[1m'
 DIM='\033[2m'
 
-# ASCII Art Banner
 clear
 echo -e "${CYAN}"
-cat << "EOF"
-    ███╗   ██╗██╗ ██████╗ ██╗  ██╗████████╗██╗  ██╗ █████╗ ██╗    ██╗██╗  ██╗
-    ████╗  ██║██║██╔════╝ ██║  ██║╚══██╔══╝██║  ██║██╔══██╗██║    ██║██║ ██╔╝
-    ██╔██╗ ██║██║██║  ███╗███████║   ██║   ███████║███████║██║ █╗ ██║█████╔╝ 
-    ██║╚██╗██║██║██║   ██║██╔══██║   ██║   ██╔══██║██╔══██║██║███╗██║██╔═██╗ 
-    ██║ ╚████║██║╚██████╔╝██║  ██║   ██║   ██║  ██║██║  ██║╚███╔███╔╝██║  ██╗
-    ╚═╝  ╚═══╝╚═╝ ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝ ╚══╝╚══╝ ╚═╝  ╚═╝
-EOF
+cat banner.txt
 echo -e "${NC}"
 echo -e "${MAGENTA}${BOLD}       🦅 AI-Powered Security Assessment Platform 🦅${NC}"
 echo -e "${WHITE}            Terminal User Interface (TUI) Mode${NC}"
@@ -40,12 +27,10 @@ if [ ! -f "main_TUI.py" ]; then
     exit 1
 fi
 
-# Function to check if a command exists
 command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# Function to print status
 print_status() {
     if [ $1 -eq 0 ]; then
         echo -e "${GREEN}✓${NC} $2"
@@ -70,10 +55,8 @@ if command_exists systemctl && command_exists ollama; then
     echo ""
 fi
 
-# Check virtual environment first
 echo -e "${CYAN}${BOLD}[1/5]${NC} ${WHITE}Setting up Python environment...${NC}"
 
-# Set Python command
 PYTHON_CMD="python3"
 
 if [ -d ".venv" ]; then
@@ -90,7 +73,6 @@ else
     echo -e "${DIM}  Tip: Create one with 'python3 -m venv .venv'${NC}"
 fi
 
-# Check Python version (now using venv Python if available)
 echo -e "\n${CYAN}${BOLD}[2/5]${NC} ${WHITE}Performing system checks...${NC}"
 
 if command_exists $PYTHON_CMD || [ -x "$PYTHON_CMD" ]; then
@@ -101,7 +83,6 @@ else
     exit 1
 fi
 
-# Check dependencies
 echo -e "\n${CYAN}${BOLD}[3/5]${NC} ${WHITE}Verifying dependencies...${NC}"
 
 if $PYTHON_CMD -c "import textual" 2>/dev/null; then
@@ -141,7 +122,6 @@ else
     print_status 1 "SQLMap not found (optional)"
 fi
 
-# Check API configuration
 echo -e "\n${CYAN}${BOLD}[5/5]${NC} ${WHITE}Checking AI model configuration...${NC}"
 
 if [ -f ".env" ]; then
@@ -157,7 +137,6 @@ else
     echo -e "${DIM}  Create .env with your API keys for full functionality${NC}"
 fi
 
-# Start Ollama service (if available)
 if command_exists ollama; then
     if ! pgrep -x "ollama" > /dev/null; then
         echo -e "\n${YELLOW}Starting Ollama service...${NC}"
@@ -178,33 +157,21 @@ echo -e "${MAGENTA}${BOLD}══════════════════
 
 sleep 1
 
-# Clear screen for matrix effect
 clear
-tput civis  # Hide cursor
+tput civis
 
 cols=$(tput cols)
 rows=$(tput lines)
 
-# NIGHTHAWK ASCII art
-declare -a nighthawk_art=(
-"███╗   ██╗██╗ ██████╗ ██╗  ██╗████████╗██╗  ██╗ █████╗ ██╗    ██╗██╗  ██╗"
-"████╗  ██║██║██╔════╝ ██║  ██║╚══██╔══╝██║  ██║██╔══██╗██║    ██║██║ ██╔╝"
-"██╔██╗ ██║██║██║  ███╗███████║   ██║   ███████║███████║██║ █╗ ██║█████╔╝ "
-"██║╚██╗██║██║██║   ██║██╔══██║   ██║   ██╔══██║██╔══██║██║███╗██║██╔═██╗ "
-"██║ ╚████║██║╚██████╔╝██║  ██║   ██║   ██║  ██║██║  ██║╚███╔███╔╝██║  ██╗"
-"╚═╝  ╚═══╝╚═╝ ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝ ╚══╝╚══╝ ╚═╝  ╚═╝"
-)
+mapfile -t nighthawk_art < banner.txt
 
-# Calculate centered position
 art_height=${#nighthawk_art[@]}
 art_width=${#nighthawk_art[0]}
 start_row=$(((rows - art_height) / 2))
 start_col=$(((cols - art_width) / 2))
 
-# Matrix characters
 chars=(0 1 2 3 4 5 6 7 8 9 A B C D E F G H I J K L M N O P Q R S T U V W X Y Z a b c d e f g h i j k l m n o p q r s t u v w x y z @ '#' $ % '&' '*')
 
-# First, draw the entire art shape with random characters
 for ((line=0; line<art_height; line++)); do
     text="${nighthawk_art[$line]}"
     target_row=$((start_row + line))
@@ -212,50 +179,34 @@ for ((line=0; line<art_height; line++)); do
     for ((col_offset=0; col_offset<${#text}; col_offset++)); do
         char="${text:$col_offset:1}"
         target_col=$((start_col + col_offset))
-        
-        # Skip spaces
         if [ "$char" = " " ]; then
             continue
         fi
-        
-        # Place random character
         random_char=${chars[$((RANDOM % ${#chars[@]}))]}
         tput cup $target_row $target_col
         echo -ne "\033[32m$random_char\033[0m"
     done
 done
 
-# Small delay to show the random character art
 sleep 0.5
 
-# Now transform from bottom to top, layer by layer
 for ((line=$((art_height-1)); line>=0; line--)); do
     text="${nighthawk_art[$line]}"
     target_row=$((start_row + line))
-    
-    # Process each character position in this line
     for ((col_offset=0; col_offset<${#text}; col_offset++)); do
         final_char="${text:$col_offset:1}"
         target_col=$((start_col + col_offset))
-        
-        # Skip spaces
         if [ "$final_char" = " " ]; then
             continue
         fi
-        
-        # Transform to actual character
         tput cup $target_row $target_col
         echo -ne "\033[92m$final_char\033[0m"
     done
-    
-    # Small delay between layers
     sleep 0.1
 done
 
-# Hold for 1 second
 sleep 1
 
-# Cleanup
 tput cnorm
 clear
 
@@ -264,10 +215,8 @@ echo -e "${DIM}Press Ctrl+C to exit the TUI${NC}\n"
 
 sleep 1
 
-# Launch the TUI
 $PYTHON_CMD main_TUI.py
 
-# Cleanup message
 EXIT_CODE=$?
 echo -e "\n${CYAN}${BOLD}════════════════════════════════════════════════════════${NC}"
 if [ $EXIT_CODE -eq 0 ]; then
@@ -277,7 +226,6 @@ else
 fi
 echo -e "${CYAN}${BOLD}════════════════════════════════════════════════════════${NC}\n"
 
-# Stop Ollama service if we started it
 echo -e "${CYAN}Cleaning up services...${NC}"
 if command_exists systemctl && command_exists ollama; then
     if systemctl is-active --quiet ollama; then
