@@ -34,6 +34,7 @@ Nighthawk is an intelligent security assistant that bridges the gap between conv
 - **Matrix Rain Animation** - Eye-catching startup sequence
 - **Tabbed Navigation** - Switch between Chat, Scan, and Settings views
 - **Syntax Highlighting** - Color-coded output for better readability
+- **Text-to-Speech** - AI responses with natural-sounding voices (Edge-TTS)
 
 ### 🧠 Intelligent Command Processing
 - **Natural Language Interface** - Talk naturally, no need to memorize commands
@@ -57,11 +58,14 @@ Nighthawk is an intelligent security assistant that bridges the gap between conv
 
 ### System Requirements
 - **OS**: Arch Linux (or Arch-based: Manjaro, EndeavourOS, Garuda)
-- **Python**: 3.8 or higher
+- **Python**: 3.8 or higher (3.11+ recommended for all features)
 - **RAM**: 8GB recommended (4GB minimum)
 - **Disk**: 5GB free space
+- **Audio**: mpv or ffplay (for Text-to-Speech playback)
 
 > 💡 **Note**: Ubuntu/Debian support is planned for future releases
+
+> 🔊 **Text-to-Speech Feature**: Now uses Edge-TTS (Microsoft neural voices) - fast, lightweight, and works on Python 3.8+. Audio playback requires `mpv` or `ffplay` installed on your system.
 
 ---
 
@@ -74,7 +78,7 @@ Nighthawk is an intelligent security assistant that bridges the gap between conv
 sudo pacman -Syu
 
 # 2. Install core dependencies
-sudo pacman -S python python-pip nmap
+sudo pacman -S python python-pip nmap mpv
 
 # 3. Install Ollama
 curl -fsSL https://ollama.com/install.sh | sh
@@ -96,7 +100,7 @@ yay -S metasploit
 # 6. Setup Nighthawk
 cd ~/Documents/Nighthawk
 
-# Run automated installer
+# Run automated installer (installs all Python dependencies including edge-tts)
 python install.py
 
 # Make launch scripts executable
