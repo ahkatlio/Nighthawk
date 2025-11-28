@@ -176,8 +176,60 @@ class NighthawkInstaller:
         self.requirements_file = Path('requirements.txt')
     
     def get_python_command(self):
-        """Get the appropriate Python command"""
+        """Get the appropriate Python command (respects pyenv)"""
+        # First, check if there's a .python-version file (pyenv local)
+        python_version_file = Path('.python-version')
+        if python_version_file.exists():
+            with open(python_version_file, 'r') as f:
+                pyenv_version = f.read().strip()
+                
+                # Try using pyenv to get the exact python path
+                try:
+                    result = subprocess.run(['pyenv', 'which', 'python'], 
+                                          stdout=subprocess.PIPE, 
+                                          stderr=subprocess.PIPE, 
+                                          text=True,
+                                          env={**os.environ, 'PYENV_VERSION': pyenv_version})
+                    if result.returncode == 0:
+                        python_path = result.stdout.strip()
+                        # Verify it's the right version
+                        verify = subprocess.run([python_path, '--version'], 
+                                              stdout=subprocess.PIPE, 
+                                              stderr=subprocess.PIPE, 
+                                              text=True)
+                        version_output = verify.stdout or verify.stderr
+                        if pyenv_version.split('.')[0:2] == version_output.split()[1].split('.')[0:2]:
+                            return python_path
+                except:
+                    pass
+                
+                # Try with PYENV_VERSION environment variable set
+                try:
+                    # Check if 'python' with PYENV_VERSION works
+                    test_env = os.environ.copy()
+                    test_env['PYENV_VERSION'] = pyenv_version
+                    result = subprocess.run(['python', '--version'], 
+                                          stdout=subprocess.PIPE, 
+                                          stderr=subprocess.PIPE, 
+                                          text=True,
+                                          env=test_env)
+                    output = result.stdout or result.stderr
+                    if pyenv_version.split('.')[0:2] == output.split()[1].split('.')[0:2]:
+                        # Store this for later use
+                        self.pyenv_version = pyenv_version
+                        return 'python'
+                except:
+                    pass
+        
+        # Fallback to python3
         return 'python3'
+    
+    def _get_subprocess_env(self):
+        """Get environment variables for subprocess calls"""
+        env = os.environ.copy()
+        if hasattr(self, 'pyenv_version'):
+            env['PYENV_VERSION'] = self.pyenv_version
+        return env
     
     def get_pip_command(self):
         """Get the path to pip in our virtual environment"""
@@ -276,14 +328,36 @@ class NighthawkInstaller:
         print(self.fx.box(venv_text, '< VIRTUAL ENVIRONMENT >'))
         print()
         
+        # Detect Python version being used
+        python_cmd = self.get_python_command()
+        try:
+            version_result = subprocess.run([python_cmd, '--version'], 
+                                          stdout=subprocess.PIPE, 
+                                          stderr=subprocess.PIPE, 
+                                          text=True)
+            python_version = version_result.stdout.strip() or version_result.stderr.strip()
+            print(self.fx.status('info', f'Using: {python_version}'))
+        except:
+            pass
+        
         self.fx.loading_dots('[*] Materializing .venv directory', 1.5)
         
         try:
-            subprocess.run([self.get_python_command(), '-m', 'venv', str(self.venv_path)], 
+            subprocess.run([python_cmd, '-m', 'venv', str(self.venv_path)], 
                          check=True, 
                          stdout=subprocess.PIPE, 
-                         stderr=subprocess.PIPE)
+                         stderr=subprocess.PIPE,
+                         env=self._get_subprocess_env())
             print(self.fx.status('success', 'VIRTUAL ENVIRONMENT CREATED SUCCESSFULLY'))
+            
+            # Verify the Python version in venv
+            venv_python = self.get_python_executable()
+            verify_result = subprocess.run([venv_python, '--version'], 
+                                         stdout=subprocess.PIPE, 
+                                         stderr=subprocess.PIPE, 
+                                         text=True)
+            venv_version = verify_result.stdout.strip() or verify_result.stderr.strip()
+            print(self.fx.status('success', f'Virtual environment using: {venv_version}'))
         except subprocess.CalledProcessError as e:
             print(self.fx.status('error', f'VIRTUAL ENVIRONMENT CREATION FAILED: {e}'))
             sys.exit(1)
