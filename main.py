@@ -1,9 +1,3 @@
-#!/usr/bin/env python3
-"""
-Nighthawk Security Assistant
-AI-powered security tool orchestrator using Ollama and Google Gemini
-"""
-
 import sys
 import os
 import re
@@ -25,7 +19,6 @@ from tools.metasploit_tool import MetasploitTool
 from tools.base_tool import BaseTool
 from cli.command_manager import CommandManager
 
-# Load environment variables
 load_dotenv()
 
 console = Console()
@@ -36,22 +29,17 @@ class NighthawkAssistant:
     
     def __init__(self, model: str = "dolphin-llama3:8b"):
         self.model = model
-        self.current_model = "ollama"  # Track which model is active: 'ollama' or 'gemini'
+        self.current_model = "ollama"
         self.console = Console()
         self.tools = {}
         self.active_tool = None
-        self.conversation_history = []  # Temporary conversation storage (shared between both models)
-        self.scan_results = {}  # Temporary scan results storage (stores tool outputs)
-        self.last_target = None  # Remember the last scanned target
+        self.conversation_history = []
+        self.scan_results = {}
+        self.last_target = None
         
-        # Initialize CLI command manager
         self.command_manager = CommandManager()
-        
-        # Initialize Google Gemini
         self.gemini_chat = None
         self._init_gemini()
-        
-        # Register available tools
         self._register_tools()
     
     def _init_gemini(self):
@@ -73,19 +61,10 @@ class NighthawkAssistant:
             self.gemini_chat = None
     
     def _register_tools(self):
-        """Register all available security tools"""
-        # Add Nmap
         nmap = NmapTool()
         self.tools['nmap'] = nmap
-        
-        # Add Metasploit
         metasploit = MetasploitTool()
         self.tools['metasploit'] = metasploit
-        
-        # Future tools will be added here:
-        # self.tools['nikto'] = NiktoTool()
-        # self.tools['sqlmap'] = SQLMapTool()
-        # etc.
     
     def check_ollama_connection(self) -> bool:
         """Check if Ollama is running and accessible"""
@@ -108,14 +87,10 @@ class NighthawkAssistant:
         return all_ok
     
     def extract_hostname(self, text: str) -> Optional[str]:
-        """Extract hostname from URL or text"""
-        # Try to find URLs in the text
         url_pattern = r'https?://([a-zA-Z0-9.-]+(?:\.[a-zA-Z]{2,})?)'
         matches = re.findall(url_pattern, text)
         if matches:
             return matches[0]
-        
-        # Try to parse as URL
         try:
             parsed = urlparse(text)
             if parsed.netloc:
@@ -168,15 +143,12 @@ User message: """
                 )
                 intent = response['message']['content'].strip().upper()
             
-            # Extract the first word if AI gave more than one word
             if ' ' in intent:
                 intent = intent.split()[0]
             
-            # Validate response
             if intent in ['SCAN', 'EXPLOIT', 'CHAT']:
                 return intent
             
-            # Fallback: check for keywords if AI response is unclear
             request_lower = user_request.lower()
             if any(word in request_lower for word in ['scan', 'nmap', 'port', 'enumerate']):
                 return 'SCAN'
@@ -186,7 +158,6 @@ User message: """
                 return 'CHAT'
                 
         except Exception as e:
-            # Fallback to keyword detection silently
             return self._fallback_intent_detection(user_request)
     
     def _fallback_intent_detection(self, user_request: str) -> str:
@@ -199,7 +170,7 @@ User message: """
             'stealth', 'udp scan', 'tcp scan'
         ]
         
-        # Exploit-related action patterns (regex for flexible matching)
+        # Exploit-related action patterns
         exploit_patterns = [
             r'find\s+(the\s+|that\s+)?exploit',
             r'run\s+(the\s+|that\s+)?exploit',
@@ -247,38 +218,26 @@ User message: """
         return self.detect_user_intent(user_request)
     
     def detect_tool(self, user_request: str, ai_response: str) -> Optional[str]:
-        """Detect which tool to use based on request and AI response"""
-        # Check for tool keywords in AI response
         for tool_name in self.tools.keys():
             if tool_name in ai_response.lower():
                 return tool_name
-        
-        # Fallback: check user request
         for tool_name in self.tools.keys():
             if tool_name in user_request.lower():
                 return tool_name
-        
         return None
     
     def ask_ollama(self, user_request: str, tool_context: Optional[str] = None, 
                    output_to_analyze: Optional[str] = None, is_casual: bool = False) -> str:
-        """Ask Ollama to interpret user request or analyze tool output"""
-        
         if output_to_analyze:
-            # Analysis mode - include previous context
             system_prompt = """You are a security expert analyzing scan results.
 Provide clear, actionable insights. Remember previous scan results to give comprehensive advice."""
-            
-            # Include recent scan results in context
             context = ""
             if self.scan_results:
                 context = "\n\nPrevious scan results for context:\n"
-                for target, result in list(self.scan_results.items())[-3:]:  # Last 3 scans
-                    # Handle both string results and dict results (parsed data)
+                for target, result in list(self.scan_results.items())[-3:]:
                     if isinstance(result, str):
                         context += f"- {target}: {result[:200]}...\n"
                     elif isinstance(result, dict):
-                        # For parsed data, create a summary
                         if 'open_ports' in result:
                             ports = [p.get('port', '?') for p in result.get('open_ports', [])]
                             context += f"- {target}: Found {len(ports)} open ports: {', '.join(ports[:5])}\n"
@@ -294,30 +253,22 @@ Provide:
 2. Key discoveries (ports, services, vulnerabilities)
 3. Security concerns
 4. Recommended next steps (consider previous scans if relevant)"""
-        
         elif is_casual:
-            # Casual conversation mode
             system_prompt = """You are Nighthawk, a friendly security assistant.
 You can have normal conversations AND help with security scanning.
 Be helpful, conversational, and remember context.
 Don't try to scan things unless the user explicitly asks for it.
 
 Note: Your responses can be read aloud with text-to-speech if the user has enabled it in Settings."""
-            
             prompt = user_request
-        
         else:
-            # Command generation mode
             if tool_context:
                 system_prompt = tool_context
             else:
-                # Detect which tool is needed and use its prompt
                 request_lower = user_request.lower()
                 system_prompt = """You are a Kali Linux security expert.
 Generate ONLY the command to execute, nothing else.
 Do NOT respond with explanations or questions - ONLY the command."""
-                
-                # Use tool-specific prompts
                 if any(word in request_lower for word in ['scan', 'nmap', 'port', 'network']):
                     if 'nmap' in self.tools:
                         system_prompt = self.tools['nmap'].get_ai_prompt()
@@ -340,44 +291,28 @@ User: "quick scan 192.168.1.1"
 You: nmap -F 192.168.1.1
 
 Now respond to: {user_request}"""
-        
         try:
-            # Build messages with conversation history for context
             messages = [{"role": "system", "content": system_prompt}]
-            
-            # Add recent conversation history (last 5 messages)
             for msg in self.conversation_history[-5:]:
                 messages.append(msg)
-            
-            # Add current prompt
             messages.append({"role": "user", "content": prompt})
             
-            response = ollama.chat(
-                model=self.model,
-                messages=messages
-            )
-            
+            response = ollama.chat(model=self.model, messages=messages)
             ai_message = response['message']['content']
             
-            # Store in conversation history
             self.conversation_history.append({"role": "user", "content": user_request})
             self.conversation_history.append({"role": "assistant", "content": ai_message})
-            
             return ai_message
         except Exception as e:
             return f"Error communicating with Ollama: {e}"
     
     def ask_gemini(self, user_request: str, tool_context: Optional[str] = None, 
                    output_to_analyze: Optional[str] = None, is_casual: bool = False) -> str:
-        """Ask Google Gemini to interpret user request or analyze tool output"""
-        
         if not self.gemini_chat:
             return "Error: Google Gemini is not initialized. Check your API key in .env file."
         
         try:
-            # Build prompt based on context
             if output_to_analyze:
-                # Analysis mode - include previous context
                 context = ""
                 if self.scan_results:
                     context = "\n\nPrevious scan results for context:\n"
@@ -390,7 +325,6 @@ Now respond to: {user_request}"""
                                 context += f"- {target}: Found {len(ports)} open ports: {', '.join(ports[:5])}\n"
                             else:
                                 context += f"- {target}: (parsed data available)\n"
-                
                 prompt = f"""Analyze this security scan output:{context}
 
 {output_to_analyze}
@@ -400,13 +334,9 @@ Provide:
 2. Key discoveries (ports, services, vulnerabilities)
 3. Security concerns
 4. Recommended next steps (consider previous scans if relevant)"""
-            
             elif is_casual:
-                # Casual conversation mode
                 prompt = user_request
-            
             else:
-                # Command generation mode
                 if tool_context:
                     prompt = f"{tool_context}\n\nUser request: {user_request}\n\nGenerate the appropriate security tool command. Respond with ONLY the command (one line, no explanations)."
                 else:
@@ -414,28 +344,19 @@ Provide:
 
 Generate the appropriate security tool command.
 Respond with ONLY the command (one line, no explanations)."""
-            
-            # Send message with streaming for faster response
             response = self.gemini_chat.send_message(prompt, stream=True)
-            
-            # Collect streamed response
             ai_message = ""
             for chunk in response:
                 ai_message += chunk.text
             
-            # Check if we got any response
             if not ai_message or len(ai_message.strip()) == 0:
-                # Content was blocked by safety filters, fallback to Ollama
                 console.print("[dim yellow]⚠ Gemini blocked response (safety filters), falling back to Ollama...[/dim yellow]")
                 return self.ask_ollama(user_request, tool_context, output_to_analyze, is_casual)
             
-            # Store in shared conversation history
             self.conversation_history.append({"role": "user", "content": user_request})
             self.conversation_history.append({"role": "assistant", "content": ai_message})
-            
             return ai_message
         except Exception as e:
-            # Check if it's a safety filter issue
             error_msg = str(e)
             if "finish_reason" in error_msg or "valid Part" in error_msg or "SAFETY" in error_msg.upper():
                 console.print("[dim yellow]⚠ Gemini safety filters triggered, switching to Ollama...[/dim yellow]")
@@ -571,107 +492,72 @@ Respond with ONLY the command (one line, no explanations)."""
                 else:
                     user_input_for_ai = user_input
                 
-                # If intent is EXPLOIT, use Metasploit
                 if intent == 'EXPLOIT' and 'metasploit' in self.tools:
                     tool_name = 'metasploit'
                     tool = self.tools['metasploit']
-                    
-                    # Prepare scan context from previous nmap results
                     scan_context = self.prepare_scan_context(hostname or self.last_target)
                     
-                    # Validate scan_context is a dict or None
                     if scan_context and not isinstance(scan_context, dict):
                         console.print(f"[red]Error: Invalid scan context type: {type(scan_context)}[/red]")
                         console.print("[yellow]Please run a scan first before exploiting[/yellow]")
                         continue
                     
                     if not scan_context:
-                        # No previous scan data - need to scan first
                         console.print("[yellow]⚠ No previous scan data found![/yellow]")
                         console.print("[cyan]💡 Tip: Run an nmap scan first, then I can find exploits based on the results.[/cyan]")
                         console.print(f"[dim]Example: 'scan {hostname or 'target.com'}' then 'exploit that target'[/dim]")
                         continue
                     
                     console.print(f"[dim]Using previous scan data for {scan_context.get('target', 'target')}[/dim]")
-                    
-                    # Generate Metasploit commands with context
                     commands = tool.generate_command(user_input_for_ai, scan_context)
                     
                     if commands:
-                        # Execute Metasploit commands
                         result = tool.execute(commands)
-                        
                         if result['success']:
                             tool.format_output(result, commands)
-                            
-                            # Store result
                             target = hostname or self.last_target or "unknown"
                             self.scan_results[f"{target}_metasploit"] = result['stdout']
-                            
-                            # Get AI analysis
                             console.print("\n[dim]Analyzing exploit results...[/dim]")
-                            analysis = self.ask_ai(
-                                user_input,
-                                output_to_analyze=result['stdout']
-                            )
+                            analysis = self.ask_ai(user_input, output_to_analyze=result['stdout'])
                             self.display_analysis(analysis)
                         else:
                             console.print(f"[bold red]Error:[/bold red] {result.get('error', 'Unknown error')}")
                     else:
                         console.print("[yellow]Could not generate Metasploit commands[/yellow]")
-                    
                     continue
                 
-                # Default to nmap or other scanning tools
                 tool_context = self.tools['nmap'].get_ai_prompt()
                 ai_response = self.ask_ai(user_input_for_ai, tool_context=tool_context)
-                
-                # Detect which tool to use
                 tool_name = self.detect_tool(user_input, ai_response)
                 
                 if not tool_name:
-                    # No tool detected, just show AI response
                     md = Markdown(ai_response)
                     console.print(Panel(md, title="Response", border_style="cyan"))
                     continue
                 
                 tool = self.tools[tool_name]
-                
-                # Generate command
                 command = tool.generate_command(user_input, ai_response)
                 
                 if command:
                     console.print(f"\n[yellow]Generated command:[/yellow] {command}")
-                    
-                    # Execute command
                     result = tool.execute(command)
                     
                     if result['success']:
-                        # Store scan result temporarily
                         target = hostname if hostname else "unknown"
                         self.scan_results[target] = result['stdout']
-                        self.last_target = target  # Remember last target
+                        self.last_target = target
                         
-                        # Parse and store structured data for Metasploit to use
                         if tool_name == 'nmap' and hasattr(tool, 'parse_scan_data'):
                             parsed_data = tool.parse_scan_data(result['stdout'])
                             self.scan_results[f"{target}_parsed"] = parsed_data
                         
                         self.display_results(result['stdout'], tool_name)
-                        
-                        # Get AI analysis
                         console.print("\n[dim]Analyzing results...[/dim]")
-                        analysis = self.ask_ai(
-                            user_input,
-                            output_to_analyze=result['stdout']
-                        )
+                        analysis = self.ask_ai(user_input, output_to_analyze=result['stdout'])
                         self.display_analysis(analysis)
                     else:
-                        console.print(
-                            f"[bold red]Error executing {tool_name}:[/bold red]\n{result['stderr']}"
-                        )
+                        console.print(f"[bold red]Error executing {tool_name}:[/bold red]\n{result['stderr']}")
                 else:
-                    # Just show the AI response
                     md = Markdown(ai_response)
                     console.print(Panel(md, title="Response", border_style="cyan"))
                     
@@ -681,41 +567,23 @@ Respond with ONLY the command (one line, no explanations)."""
                 console.print(f"[bold red]Error:[/bold red] {e}")
     
     def prepare_scan_context(self, target: Optional[str] = None) -> Optional[Dict]:
-        """
-        Prepare scan context from previous nmap results for use in other tools
-        
-        Args:
-            target: Target to get context for (or use last_target)
-        
-        Returns:
-            Dictionary with target, ip, open_ports, services, os info
-        """
         if not target:
             target = self.last_target
-        
         if not target or target not in self.scan_results:
             return None
-        
-        # Check if we have parsed data
         parsed_key = f"{target}_parsed"
         if parsed_key in self.scan_results:
             scan_data = self.scan_results[parsed_key]
             scan_data['target'] = target
             return scan_data
-        
-        # If no parsed data, try to use the metasploit tool's parser
         if 'metasploit' in self.tools:
             raw_output = self.scan_results.get(target, '')
             if raw_output:
                 metasploit_tool = self.tools['metasploit']
                 parsed_data = metasploit_tool.parse_scan_data(raw_output)
                 parsed_data['target'] = target
-                
-                # Cache it for future use
                 self.scan_results[parsed_key] = parsed_data
-                
                 return parsed_data
-        
         return None
     
     def cleanup(self):
