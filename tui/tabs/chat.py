@@ -16,6 +16,13 @@ try:
 except ImportError:
     NighthawkAssistant = None
 
+try:
+    from tui.tts_service import get_tts_service
+    TTS_AVAILABLE = True
+except ImportError:
+    TTS_AVAILABLE = False
+    get_tts_service = None
+
 
 class SudoPasswordScreen(ModalScreen):
     """Modal screen for sudo password input"""
@@ -273,7 +280,24 @@ class ChatArea(Container):
                     is_casual=True
                 )
                 await self._write_with_typing(process_log, "[green]✅ Response generated[/green]\n")
+                
+                # Display AI response first
                 chat_history.mount(ChatMessage(ai_response, is_user=False))
+                
+                # Scroll to show new message
+                if autoscroll:
+                    chat_history.scroll_end(animate=True)
+                
+                # Then speak it (if TTS is enabled)
+                if TTS_AVAILABLE:
+                    try:
+                        tts = get_tts_service()
+                        if tts.is_enabled():
+                            # Speak the AI response in background (non-blocking)
+                            tts.speak_text(ai_response, blocking=False)
+                    except Exception as e:
+                        # Fail silently - TTS is optional
+                        pass
                 
             elif self.current_mode in ["SCAN", "EXPLOIT"]:
                 # Tool execution mode
@@ -410,7 +434,6 @@ class ChatArea(Container):
                             await self._write_with_typing(process_log, f"[green]✅ {tool_name.upper()} COMPLETED[/green]\n")
                             process_log.write(f"[yellow]{'═' * 50}[/yellow]")
                             
-                            # Get AI analysis
                             await self._write_with_typing(process_log, f"[yellow]🧠 Analyzing results with {model_name}...[/yellow]\n")
                             analysis = await asyncio.to_thread(
                                 assistant.ask_ai,
@@ -422,6 +445,21 @@ class ChatArea(Container):
                             
                             # Display analysis in left panel (chat)
                             chat_history.mount(ChatMessage(analysis, is_user=False))
+                            
+                            # Scroll to show new message
+                            if autoscroll:
+                                chat_history.scroll_end(animate=True)
+                            
+                            # Speak the analysis (if TTS is enabled)
+                            if TTS_AVAILABLE:
+                                try:
+                                    tts = get_tts_service()
+                                    if tts.is_enabled():
+                                        # Speak the analysis in background
+                                        await asyncio.to_thread(tts.speak_text, analysis, blocking=False)
+                                except Exception as e:
+                                    # Fail silently - TTS is optional
+                                    pass
                         else:
                             # Show error
                             process_log.write(f"[red]❌ Error executing {tool_name}:[/red]")
@@ -443,8 +481,21 @@ class ChatArea(Container):
                     # No tool available, just show AI response
                     process_log.write("[yellow]⚠️ No tool detected, showing AI response[/yellow]")
                     chat_history.mount(ChatMessage(ai_response, is_user=False))
+                    
+                    # Scroll to show new message
+                    if autoscroll:
+                        chat_history.scroll_end(animate=True)
+                    
+                    # Speak the response (if TTS is enabled)
+                    if TTS_AVAILABLE:
+                        try:
+                            tts = get_tts_service()
+                            if tts.is_enabled():
+                                await asyncio.to_thread(tts.speak_text, ai_response, blocking=False)
+                        except Exception as e:
+                            pass
             
-            # Auto-scroll if enabled
+            # Auto-scroll if enabled (final check)
             if autoscroll:
                 chat_history.scroll_end(animate=True)
             
