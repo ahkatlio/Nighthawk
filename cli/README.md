@@ -127,18 +127,6 @@ These are built-in commands (not CLI commands):
    help <command>
    ```
 
-## Architecture
-
-```
-cli/
-├── __init__.py           - Module initialization
-├── base_command.py       - Base class for all commands
-├── command_manager.py    - Command routing and execution
-├── help_command.py       - Help command implementation
-├── status_command.py     - Status command implementation
-├── token_command.py      - Token usage command
-└── clear_command.py      - Clear data command
-```
 
 ## Adding New Commands
 
