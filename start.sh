@@ -1,6 +1,3 @@
-#!/bin/bash
-# Nighthawk Security Assistant - Quick Start
-
 # Start Ollama service
 echo "Starting Ollama service..."
 sudo systemctl start ollama
