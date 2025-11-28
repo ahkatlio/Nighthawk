@@ -1,7 +1,3 @@
-"""
-Nmap tool integration
-"""
-
 import subprocess
 import re
 from typing import Dict, Optional
@@ -12,13 +8,10 @@ console = Console()
 
 
 class NmapTool(BaseTool):
-    """Nmap network scanner integration"""
-    
     def __init__(self):
         super().__init__(name="nmap", command="nmap")
     
     def check_installed(self) -> bool:
-        """Check if nmap is installed"""
         try:
             result = subprocess.run(
                 ["nmap", "--version"],
@@ -27,7 +20,6 @@ class NmapTool(BaseTool):
                 timeout=5
             )
             if result.returncode == 0:
-                # Extract version
                 version_match = re.search(r'Nmap version ([\d.]+)', result.stdout)
                 if version_match:
                     console.print(f"[green]✓[/green] Nmap {version_match.group(1)} detected")
@@ -38,13 +30,10 @@ class NmapTool(BaseTool):
             return False
     
     def generate_command(self, user_request: str, ai_response: str) -> Optional[str]:
-        """Extract and enhance nmap command from AI response"""
         command = None
         
-        # Find the nmap command in the response
         for line in ai_response.split('\n'):
             line = line.strip()
-            # Remove markdown code block markers
             if line.startswith('```'):
                 continue
             if line.startswith('`') and line.endswith('`'):
@@ -53,30 +42,24 @@ class NmapTool(BaseTool):
                 command = line
                 break
         
-        # If no command found in AI response, try to generate one from user request
         if not command:
             console.print("[yellow]No nmap command in AI response, generating basic scan...[/yellow]")
             
-            # Extract target from user request
             import re
-            # Look for URLs, IPs, or hostnames
             url_pattern = r'(?:https?://)?(?:www\.)?([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})'
             ip_pattern = r'\b(?:\d{1,3}\.){3}\d{1,3}\b'
             
             target = None
             
-            # Try IP first
             ip_match = re.search(ip_pattern, user_request)
             if ip_match:
                 target = ip_match.group(0)
             else:
-                # Try hostname/URL
                 url_match = re.search(url_pattern, user_request)
                 if url_match:
                     target = url_match.group(1)
             
             if target:
-                # Generate basic scan command
                 command = f"nmap -Pn -sV -sC {target}"
                 console.print(f"[cyan]Generated command: {command}[/cyan]")
             else:
@@ -86,24 +69,19 @@ class NmapTool(BaseTool):
         if command:
             parts = command.split()
             
-            # Flags that require root/sudo privileges
             root_flags = ['-O', '--osscan-guess', '-sS', '-sU', '-sA', '-sW', '-sM']
             needs_sudo = any(flag in parts for flag in root_flags)
             
-            # Check if running as root
             import os
             is_root = os.geteuid() == 0
             
             if needs_sudo and not is_root:
-                # Add sudo to the command instead of removing flags
                 console.print("[yellow]⚠️  This scan requires root privileges[/yellow]")
                 console.print("[cyan]Adding 'sudo' to command - you'll be prompted for your password[/cyan]")
                 command = 'sudo ' + command
                 parts = command.split()
             
-            # Auto-add -Pn flag if not present (skip host discovery)
             if '-Pn' not in parts and '-sn' not in parts:
-                # Find where to insert -Pn (after sudo and nmap)
                 insert_pos = 1
                 if parts[0] == 'sudo':
                     insert_pos = 2
@@ -115,15 +93,12 @@ class NmapTool(BaseTool):
         return command
     
     def execute(self, command: str) -> Dict[str, any]:
-        """Execute nmap command"""
         return self.run_command(command, timeout=300)
     
     def format_output(self, output: str) -> str:
-        """Format nmap output for display"""
         return output
     
     def get_ai_prompt(self) -> str:
-        """Get the AI system prompt for nmap"""
         return """You are a Kali Linux security expert specializing in nmap network scanning.
 
 When generating nmap commands:
@@ -164,15 +139,6 @@ When analyzing nmap output, provide:
 4. Recommended next steps for deeper analysis"""
     
     def parse_scan_data(self, raw_output: str) -> dict:
-        """
-        Parse nmap output to extract structured data for other tools
-        
-        Args:
-            raw_output: Raw nmap scan output
-        
-        Returns:
-            Dictionary with open_ports, services, os, ip
-        """
         scan_data = {
             'open_ports': [],
             'services': [],
@@ -180,9 +146,6 @@ When analyzing nmap output, provide:
             'ip': None
         }
         
-        # Extract open ports and services
-        # Pattern: PORT     STATE SERVICE    VERSION
-        # Example: 22/tcp   open  ssh        OpenSSH 8.9p1
         port_pattern = r'(\d+)/tcp\s+open\s+(\S+)\s*(.*)?'
         matches = re.findall(port_pattern, raw_output)
         
@@ -195,7 +158,6 @@ When analyzing nmap output, provide:
             scan_data['open_ports'].append(port_info)
             scan_data['services'].append(match[1])
         
-        # Extract OS information
         os_patterns = [
             r'OS details?: (.+)',
             r'Running: (.+)',
@@ -208,7 +170,6 @@ When analyzing nmap output, provide:
                 scan_data['os'] = os_match.group(1).strip()
                 break
         
-        # Extract IP address
         ip_patterns = [
             r'Nmap scan report for .*?\(([0-9.]+)\)',
             r'Nmap scan report for ([0-9.]+)'
