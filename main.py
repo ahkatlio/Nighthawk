@@ -62,7 +62,7 @@ class NighthawkAssistant:
                 genai.configure(api_key=api_key)
                 model = genai.GenerativeModel(
                     model_name="gemini-2.5-flash",
-                    system_instruction="You are Nighthawk, a security expert assistant. Help with security scanning, provide clear insights, and remember conversation context."
+                    system_instruction="You are Nighthawk, a security expert assistant. Help with security scanning, provide clear insights, and remember conversation context. Your responses can be spoken aloud with text-to-speech."
                 )
                 self.gemini_chat = model.start_chat(history=[])
                 console.print("[dim green]✓ Google Gemini initialized[/dim green]")
@@ -300,7 +300,9 @@ Provide:
             system_prompt = """You are Nighthawk, a friendly security assistant.
 You can have normal conversations AND help with security scanning.
 Be helpful, conversational, and remember context.
-Don't try to scan things unless the user explicitly asks for it."""
+Don't try to scan things unless the user explicitly asks for it.
+
+Note: Your responses can be read aloud with text-to-speech if the user has enabled it in Settings."""
             
             prompt = user_request
         
