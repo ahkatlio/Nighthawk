@@ -1,8 +1,3 @@
-"""
-Command Manager
-Manages and routes CLI commands
-"""
-
 from typing import Dict, Optional
 from .base_command import BaseCommand
 from .status_command import StatusCommand
@@ -10,15 +5,12 @@ from .token_command import TokenCommand
 from .help_command import HelpCommand
 from .clear_command import ClearCommand
 
-class CommandManager:
-    """Manages CLI commands"""
-    
+class CommandManager:    
     def __init__(self):
         self.commands: Dict[str, BaseCommand] = {}
         self._register_commands()
     
     def _register_commands(self):
-        """Register all available commands"""
         commands = [
             StatusCommand(),
             TokenCommand(),
@@ -30,7 +22,6 @@ class CommandManager:
             self.commands[command.name] = command
     
     def get_command(self, name: str) -> Optional[BaseCommand]:
-        """Get a command by name"""
         return self.commands.get(name.lower())
     
     def execute(self, name: str, assistant, args: list = None) -> bool:
@@ -56,7 +47,6 @@ class CommandManager:
         return False
     
     def is_command(self, input_text: str) -> bool:
-        """Check if input is a CLI command"""
         parts = input_text.strip().split()
         if not parts:
             return False
