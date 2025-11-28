@@ -2,6 +2,7 @@ from textual.app import App, ComposeResult
 from textual.widgets import Footer, Header, Label, Tabs
 from textual.containers import Container
 from textual import events
+from textual.binding import Binding
 
 # Import tab modules
 from tui.tabs.chat import ChatArea
@@ -20,6 +21,11 @@ class NighthawkTUI(App):
     
     CSS_PATH = "tui/styles/nighthawk.tcss"
     TITLE = "🦅 Nighthawk AI - Advanced Pentesting Assistant"
+    BINDINGS = [
+        Binding("ctrl+1", "switch_tab_1", "Chat", priority=True),
+        Binding("ctrl+2", "switch_tab_2", "Settings", priority=True),
+        Binding("ctrl+w", "stop_audio", "Stop Audio", priority=True),
+    ]
     
     TAB_NAMES = [
         "💬 Chat & Operations",
@@ -64,18 +70,28 @@ class NighthawkTUI(App):
             self.query_one("#settings-content").remove_class("hidden")
             self.current_tab_index = 1
     
-    def on_key(self, event: events.Key) -> None:
-        """Handle keyboard shortcuts for tab switching."""
+    def action_switch_tab_1(self) -> None:
+        """Switch to Chat tab"""
         tabs = self.query_one(Tabs)
-        
-        # Ctrl+1 for Chat tab
-        if event.key == "ctrl+1":
-            tabs.active = "tab-1"
-            event.prevent_default()
-        # Ctrl+2 for Settings tab
-        elif event.key == "ctrl+2":
-            tabs.active = "tab-2"
-            event.prevent_default()
+        tabs.active = "tab-1"
+    
+    def action_switch_tab_2(self) -> None:
+        """Switch to Settings tab"""
+        tabs = self.query_one(Tabs)
+        tabs.active = "tab-2"
+    
+    def action_stop_audio(self) -> None:
+        """Stop any playing TTS audio."""
+        try:
+            from tui.tts_service import get_tts_service
+            tts = get_tts_service()
+            if tts.is_speaking:
+                tts.stop_speech()
+                self.notify("🔇 Audio stopped", severity="information", timeout=2)
+            else:
+                self.notify("ℹ️ No audio playing", severity="information", timeout=2)
+        except Exception as e:
+            self.notify(f"⚠️ Could not stop audio: {e}", severity="warning", timeout=2)
 
 if __name__ == "__main__":
     app = NighthawkTUI()
