@@ -277,4 +277,18 @@ else
 fi
 echo -e "${CYAN}${BOLD}════════════════════════════════════════════════════════${NC}\n"
 
-echo -e "${DIM}Thank you for using Nighthawk! 🦅${NC}"
+# Stop Ollama service if we started it
+echo -e "${CYAN}Cleaning up services...${NC}"
+if command_exists systemctl && command_exists ollama; then
+    if systemctl is-active --quiet ollama; then
+        echo -e "${YELLOW}Stopping Ollama service...${NC}"
+        sudo systemctl stop ollama 2>/dev/null
+        if [ $? -eq 0 ]; then
+            print_status 0 "Ollama service stopped"
+        else
+            echo -e "${YELLOW}⚠ Could not stop Ollama service${NC}"
+        fi
+    fi
+fi
+
+echo -e "\n${DIM}Thank you for using Nighthawk! 🦅${NC}"
