@@ -70,26 +70,18 @@ if command_exists systemctl && command_exists ollama; then
     echo ""
 fi
 
-# Pre-flight checks
-echo -e "${CYAN}${BOLD}[1/5]${NC} ${WHITE}Performing system checks...${NC}"
+# Check virtual environment first
+echo -e "${CYAN}${BOLD}[1/5]${NC} ${WHITE}Setting up Python environment...${NC}"
 
-# Check Python
-if command_exists python3; then
-    PYTHON_VERSION=$(python3 --version | cut -d' ' -f2)
-    print_status 0 "Python ${PYTHON_VERSION} detected"
-else
-    print_status 1 "Python 3 not found"
-    exit 1
-fi
-
-# Check virtual environment
-echo -e "\n${CYAN}${BOLD}[2/5]${NC} ${WHITE}Setting up Python environment...${NC}"
+# Set Python command
+PYTHON_CMD="python3"
 
 if [ -d ".venv" ]; then
     print_status 0 "Virtual environment found"
     source .venv/bin/activate 2>/dev/null
     if [ $? -eq 0 ]; then
         print_status 0 "Virtual environment activated"
+        PYTHON_CMD=".venv/bin/python"
     else
         echo -e "${YELLOW}⚠ Could not activate venv, using system Python${NC}"
     fi
@@ -98,16 +90,27 @@ else
     echo -e "${DIM}  Tip: Create one with 'python3 -m venv .venv'${NC}"
 fi
 
+# Check Python version (now using venv Python if available)
+echo -e "\n${CYAN}${BOLD}[2/5]${NC} ${WHITE}Performing system checks...${NC}"
+
+if command_exists $PYTHON_CMD || [ -x "$PYTHON_CMD" ]; then
+    PYTHON_VERSION=$($PYTHON_CMD --version | cut -d' ' -f2)
+    print_status 0 "Python ${PYTHON_VERSION} detected"
+else
+    print_status 1 "Python 3 not found"
+    exit 1
+fi
+
 # Check dependencies
 echo -e "\n${CYAN}${BOLD}[3/5]${NC} ${WHITE}Verifying dependencies...${NC}"
 
-if python3 -c "import textual" 2>/dev/null; then
-    TEXTUAL_VERSION=$(python3 -c "import textual; print(textual.__version__)" 2>/dev/null)
+if $PYTHON_CMD -c "import textual" 2>/dev/null; then
+    TEXTUAL_VERSION=$($PYTHON_CMD -c "import textual; print(textual.__version__)" 2>/dev/null)
     print_status 0 "Textual ${TEXTUAL_VERSION} installed"
 else
     print_status 1 "Textual not found"
     echo -e "${YELLOW}Installing Textual...${NC}"
-    pip install textual -q
+    $PYTHON_CMD -m pip install textual -q
     if [ $? -eq 0 ]; then
         print_status 0 "Textual installed successfully"
     else
@@ -262,7 +265,7 @@ echo -e "${DIM}Press Ctrl+C to exit the TUI${NC}\n"
 sleep 1
 
 # Launch the TUI
-python3 main_TUI.py
+$PYTHON_CMD main_TUI.py
 
 # Cleanup message
 EXIT_CODE=$?
