@@ -1,9 +1,3 @@
-#!/usr/bin/env python3
-"""
-Nighthawk Security Tool Installer
-A hacker-themed installer with cyberpunk visual effects
-Because penetration testing tools deserve a dramatic installation
-"""
 
 import os
 import sys
@@ -18,7 +12,6 @@ class HackerEffects:
     """Cyberpunk visual effects system with ANSI color codes"""
     
     def __init__(self):
-        # ANSI color codes for hacker aesthetic
         self.colors = {
             'red': '\x1b[31m',
             'green': '\x1b[32m',
@@ -29,7 +22,6 @@ class HackerEffects:
             'white': '\x1b[37m',
             'bright': '\x1b[1m',
             'reset': '\x1b[0m',
-            # Hacker-style neon colors
             'neon_green': '\x1b[92m',
             'neon_red': '\x1b[91m',
             'neon_yellow': '\x1b[93m',
@@ -39,7 +31,6 @@ class HackerEffects:
         }
     
     def box(self, text, title=''):
-        """Create a cyberpunk box around text"""
         lines = text.split('\n')
         max_length = max(len(line) for line in lines)
         if title:
@@ -61,7 +52,6 @@ class HackerEffects:
         return result
     
     def progress_bar(self, current, total, width=50):
-        """Create a hacker-style progress bar"""
         percentage = round((current / total) * 100)
         filled = round((current / total) * width)
         empty = width - filled
@@ -75,16 +65,14 @@ class HackerEffects:
                 f"{self.colors['reset']}")
     
     def update_progress(self, current, total, text=''):
-        """Update progress on the same line (clears line first)"""
         sys.stdout.write('\r\x1b[K')  # Clear entire line
         progress = self.progress_bar(current, total)
         sys.stdout.write(f"{progress} {self.colors['neon_cyan']}{text}{self.colors['reset']}")
         sys.stdout.flush()
         if current == total:
-            print()  # New line when complete
+            print()  
     
     def glitch_text(self, text, iterations=3):
-        """Hacker-style glitch text effect"""
         chars = '!@#$%^&*()_+-=[]{}|;:,.<>?01'
         
         for i in range(iterations):
@@ -105,11 +93,9 @@ class HackerEffects:
         sys.stdout.flush()
     
     def matrix_prompt(self, text):
-        """Hacker-style terminal prompt"""
         return self.colors['neon_green'] + '> ' + self.colors['reset'] + self.colors['white'] + text + self.colors['reset']
     
     def status(self, status, message):
-        """Hacker-style status indicator"""
         status_colors = {
             'success': self.colors['neon_green'],
             'warning': self.colors['neon_yellow'],
@@ -123,14 +109,12 @@ class HackerEffects:
         return color + symbol + ' ' + message + self.colors['reset']
     
     def type_writer(self, text, delay=0.03):
-        """Animated typing effect"""
         for char in text:
             sys.stdout.write(char)
             sys.stdout.flush()
             time.sleep(delay)
     
     def loading_dots(self, text, duration=2.0):
-        """Animated loading dots with hacker styling"""
         dots = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
         start_time = time.time()
         i = 0
@@ -145,7 +129,6 @@ class HackerEffects:
         sys.stdout.flush()
     
     def hack_animation(self, duration=1.5):
-        """Hacking visualization"""
         chars = ['▓', '▒', '░', '█', '▀', '▄', '▌', '▐']
         start_time = time.time()
         
@@ -166,7 +149,6 @@ class HackerEffects:
 
 
 class NighthawkInstaller:
-    """Main installer class with hacker styling"""
     
     def __init__(self):
         self.fx = HackerEffects()
@@ -176,14 +158,11 @@ class NighthawkInstaller:
         self.requirements_file = Path('requirements.txt')
     
     def get_python_command(self):
-        """Get the appropriate Python command (respects pyenv)"""
-        # First, check if there's a .python-version file (pyenv local)
         python_version_file = Path('.python-version')
         if python_version_file.exists():
             with open(python_version_file, 'r') as f:
                 pyenv_version = f.read().strip()
                 
-                # Try using pyenv to get the exact python path
                 try:
                     result = subprocess.run(['pyenv', 'which', 'python'], 
                                           stdout=subprocess.PIPE, 
@@ -192,7 +171,6 @@ class NighthawkInstaller:
                                           env={**os.environ, 'PYENV_VERSION': pyenv_version})
                     if result.returncode == 0:
                         python_path = result.stdout.strip()
-                        # Verify it's the right version
                         verify = subprocess.run([python_path, '--version'], 
                                               stdout=subprocess.PIPE, 
                                               stderr=subprocess.PIPE, 
@@ -203,9 +181,7 @@ class NighthawkInstaller:
                 except:
                     pass
                 
-                # Try with PYENV_VERSION environment variable set
                 try:
-                    # Check if 'python' with PYENV_VERSION works
                     test_env = os.environ.copy()
                     test_env['PYENV_VERSION'] = pyenv_version
                     result = subprocess.run(['python', '--version'], 
@@ -215,32 +191,26 @@ class NighthawkInstaller:
                                           env=test_env)
                     output = result.stdout or result.stderr
                     if pyenv_version.split('.')[0:2] == output.split()[1].split('.')[0:2]:
-                        # Store this for later use
                         self.pyenv_version = pyenv_version
                         return 'python'
                 except:
                     pass
         
-        # Fallback to python3
         return 'python3'
     
     def _get_subprocess_env(self):
-        """Get environment variables for subprocess calls"""
         env = os.environ.copy()
         if hasattr(self, 'pyenv_version'):
             env['PYENV_VERSION'] = self.pyenv_version
         return env
     
     def get_pip_command(self):
-        """Get the path to pip in our virtual environment"""
         return str(self.venv_path / 'bin' / 'pip')
     
     def get_python_executable(self):
-        """Get the path to Python in our virtual environment"""
         return str(self.venv_path / 'bin' / 'python')
     
     def show_header(self):
-        """Display the epic hacker header"""
         os.system('clear')
         
         print(self.fx.colors['neon_green'] + '=' * 80 + self.fx.colors['reset'])
@@ -286,7 +256,6 @@ class NighthawkInstaller:
         print()
     
     def load_requirements(self):
-        """Load packages from requirements.txt"""
         print()
         self.fx.type_writer(self.fx.matrix_prompt('SCANNING DEPENDENCY MANIFEST...'), 0.05)
         print()
@@ -315,7 +284,6 @@ class NighthawkInstaller:
         print()
     
     def create_venv(self):
-        """Create a virtual environment if it doesn't exist"""
         if self.venv_path.exists():
             print(self.fx.status('info', 'Virtual environment already exists - USING EXISTING'))
             print()
@@ -328,7 +296,6 @@ class NighthawkInstaller:
         print(self.fx.box(venv_text, '< VIRTUAL ENVIRONMENT >'))
         print()
         
-        # Detect Python version being used
         python_cmd = self.get_python_command()
         try:
             version_result = subprocess.run([python_cmd, '--version'], 
@@ -350,7 +317,6 @@ class NighthawkInstaller:
                          env=self._get_subprocess_env())
             print(self.fx.status('success', 'VIRTUAL ENVIRONMENT CREATED SUCCESSFULLY'))
             
-            # Verify the Python version in venv
             venv_python = self.get_python_executable()
             verify_result = subprocess.run([venv_python, '--version'], 
                                          stdout=subprocess.PIPE, 
@@ -365,10 +331,8 @@ class NighthawkInstaller:
         print()
     
     def check_package_installed(self, pkg_name):
-        """Check if a package is already installed in venv"""
         package_name_only = pkg_name.split('==')[0].split('>=')[0].split('<=')[0].split('~=')[0]
         
-        # Map package names to import names
         import_name_map = {
             'python-dotenv': 'dotenv',
             'google-generativeai': 'google.generativeai',
@@ -390,7 +354,6 @@ class NighthawkInstaller:
             return False
     
     def run_pip_install(self, pkg_name):
-        """Install a package using pip in venv"""
         pip_path = self.get_pip_command() if self.venv_path.exists() else 'pip'
         
         try:
@@ -403,7 +366,6 @@ class NighthawkInstaller:
             )
             return True
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-            # Fallback to python -m pip
             try:
                 python_path = self.get_python_executable() if self.venv_path.exists() else self.get_python_command()
                 subprocess.run(
@@ -418,7 +380,6 @@ class NighthawkInstaller:
                 return False
     
     def check_dependencies(self):
-        """Check system dependencies"""
         print()
         self.fx.type_writer(self.fx.matrix_prompt('SCANNING SYSTEM FOR REQUIRED TOOLS...'), 0.04)
         print()
@@ -459,7 +420,6 @@ class NighthawkInstaller:
         print()
     
     def check_ollama(self):
-        """Check if Ollama is installed"""
         print()
         self.fx.type_writer(self.fx.matrix_prompt('CHECKING AI ENGINE (OLLAMA)...'), 0.04)
         print()
@@ -472,7 +432,6 @@ class NighthawkInstaller:
         if result.returncode == 0:
             print(self.fx.status('success', 'Ollama - DETECTED'))
             
-            # Check if dolphin-llama3:8b model is installed
             self.fx.loading_dots('[*] Checking for dolphin-llama3:8b model', 1.0)
             result = subprocess.run(['ollama', 'list'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             
@@ -491,7 +450,6 @@ class NighthawkInstaller:
         print()
     
     def install_packages(self):
-        """Install all Python packages with hacker aesthetics"""
         print()
         install_text = """[*] DEPLOYING SECURITY MODULES
 [+] Injecting dependencies into system
@@ -507,7 +465,6 @@ class NighthawkInstaller:
         missing_packages = []
         installed_packages = []
         
-        # Scan with single progress bar
         for i, pkg in enumerate(self.packages, 1):
             self.fx.update_progress(i, len(self.packages), f'[*] Scanning {pkg}')
             
@@ -519,8 +476,7 @@ class NighthawkInstaller:
         sys.stdout.write('\r\x1b[K')
         sys.stdout.flush()
         
-        print(self.fx.status('success', 
-              f'RECONNAISSANCE COMPLETE: {len(installed_packages)} already deployed, {len(missing_packages)} missing'))
+        print(self.fx.status('success', f'RECONNAISSANCE COMPLETE: {len(installed_packages)} already deployed, {len(missing_packages)} missing'))
         print()
         
         if missing_packages:
@@ -528,7 +484,6 @@ class NighthawkInstaller:
             print()
             print()
             
-            # Install with single progress bar at bottom
             for i, pkg in enumerate(missing_packages, 1):
                 self.fx.update_progress(i - 1, len(missing_packages), f'[*] Deploying {pkg}')
                 
@@ -550,7 +505,6 @@ class NighthawkInstaller:
             print()
     
     def run_python_test(self, code):
-        """Run a test using the virtual environment's Python"""
         python_path = self.get_python_executable() if self.venv_path.exists() else self.get_python_command()
         
         try:
@@ -565,7 +519,6 @@ class NighthawkInstaller:
             return False
     
     def test_packages(self):
-        """Test if packages are working with hacker theme"""
         print()
         test_text = """[*] INITIATING SYSTEM DIAGNOSTICS
 [+] Testing module integrity
@@ -605,7 +558,6 @@ class NighthawkInstaller:
         return all_passed
     
     def setup_environment(self):
-        """Setup .env file"""
         print()
         self.fx.type_writer(self.fx.matrix_prompt('CONFIGURING ENVIRONMENT...'), 0.04)
         print()
@@ -631,7 +583,6 @@ class NighthawkInstaller:
         print()
     
     def test_installation(self):
-        """Test the installation"""
         self.fx.type_writer(self.fx.matrix_prompt('RUNNING FINAL DIAGNOSTICS...'), 0.04)
         print()
         print()
@@ -642,7 +593,6 @@ class NighthawkInstaller:
         return all_passed
     
     def show_completion(self):
-        """Show completion message"""
         print()
         
         self.fx.type_writer(self.fx.matrix_prompt('NIGHTHAWK INSTALLATION COMPLETE'), 0.04)
@@ -679,28 +629,15 @@ class NighthawkInstaller:
         print()
     
     def run(self):
-        """Main installation flow"""
         try:
             self.show_header()
             self.check_dependencies()
             self.check_ollama()
-            
-            # Load requirements.txt first
             self.load_requirements()
-            
-            # Create venv if needed
             self.create_venv()
-            
-            # Install packages
             self.install_packages()
-            
-            # Setup environment
             self.setup_environment()
-            
-            # Test installation
             self.test_installation()
-            
-            # Show completion
             self.show_completion()
             
         except KeyboardInterrupt:
