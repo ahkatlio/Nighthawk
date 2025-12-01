@@ -177,35 +177,33 @@ scan https://example.com/path
 
 ### 💥 Multi-Stage Assessment Workflow
 
-**Stage 1: Reconnaissance**
-```
-You: scan target.example.com
-→ 🔍 Discovers: SSH (22), HTTP (80/Apache 2.4.6), MySQL (3306/5.7.33)
-→ Results cached in session memory
-```
-
-**Stage 2: Analysis**
-```
-You: What vulnerabilities did you find?
-→ 💬 AI analyzes results and identifies potential risks
-→ Suggests next steps
-```
-
-**Stage 3: Exploitation (Authorized Only!)**
-```
-You: find exploits for mysql version 5.7.33
-→ 💥 Searches Metasploit database
-→ Lists applicable exploits with descriptions
-
-You: exploit that target
-→ 🎯 Launches exploitation workflow
-→ Real-time progress updates
-```
-
-**Stage 4: Clean Exit**
-```
-You: quit
-→ 🧹 All session data securely wiped from memory
+```mermaid
+flowchart TD
+    A["👤 User Request"] --> B["🔍 Stage 1: Reconnaissance"]
+    B --> B1["scan target.example.com"]
+    B1 --> B2["Discovers: SSH, HTTP, MySQL"]
+    B2 --> B3["Results cached in memory"]
+    B3 --> C["💬 Stage 2: Analysis"]
+    C --> C1["What vulnerabilities found?"]
+    C1 --> C2["AI analyzes risks"]
+    C2 --> C3["Suggests next steps"]
+    C3 --> D["💥 Stage 3: Exploitation"]
+    D --> D1["find exploits for service"]
+    D1 --> D2["Searches Metasploit DB"]
+    D2 --> D3["Lists applicable exploits"]
+    D3 --> D4["Launches exploitation"]
+    D4 --> D5["Real-time progress"]
+    D5 --> E["🧹 Stage 4: Clean Exit"]
+    E --> E1["quit command"]
+    E1 --> E2["Session data wiped from memory"]
+    E2 --> F["✅ Complete"]
+    
+    style A fill:#00ff00,color:#000
+    style B fill:#0099ff,color:#fff
+    style C fill:#00ff00,color:#000
+    style D fill:#ff6600,color:#fff
+    style E fill:#9900ff,color:#fff
+    style F fill:#00ff00,color:#000
 ```
 
 ### ⚙️ Settings Tab
@@ -239,16 +237,24 @@ You: quit
 - Seamless chunking for long responses (no gaps between chunks)
 
 **How It Works:**
-```
-AI Response Generated → Text Cleaned (markdown removed)
-    ↓
-Split into Smart Chunks (adapts to speech rate)
-    ↓
-Parallel Generation (3 workers using Edge-TTS)
-    ↓
-Sequential Playback (smooth, gap-free audio)
-    ↓
-Ctrl+W = Instant Stop + Cleanup
+
+```mermaid
+flowchart TD
+    A["AI Response Generated"] --> B["Text Cleaned<br/>markdown removed"]
+    B --> C["Split into Smart Chunks<br/>adapts to speech rate"]
+    C --> D["Parallel Generation<br/>3 workers using Edge-TTS"]
+    D --> E["Sequential Playback<br/>smooth, gap-free audio"]
+    E --> F{User Action}
+    F -->|Ctrl+W| G["Instant Stop + Cleanup"]
+    F -->|Complete| H["✅ Audio Finished"]
+    
+    style A fill:#0099ff,color:#fff
+    style B fill:#00ff00,color:#000
+    style C fill:#00ff00,color:#000
+    style D fill:#ff6600,color:#fff
+    style E fill:#00ff00,color:#000
+    style G fill:#ff0000,color:#fff
+    style H fill:#00ff00,color:#000
 ```
 
 ---
@@ -381,25 +387,6 @@ mpv test.mp3
 - 🔒 Data automatically deleted on exit
 - 🔒 No persistent logs unless configured
 - 🔒 Local AI processing (Ollama)
-
----
-
-## 📦 Project Structure
-
-```
-Nighthawk/
-├── main.py                    # Core AI orchestrator
-├── main_TUI.py               # Terminal user interface
-├── tui/                       # TUI components
-│   ├── tabs/                  # Chat, Scan, Settings tabs
-│   └── widgets/              # Custom UI elements
-├── tools/                     # Security tool integrations
-│   ├── nmap_tool.py          # Nmap wrapper
-│   └── metasploit_tool.py    # Metasploit integration
-├── start.sh                   # CLI launcher
-├── start_tui.sh              # TUI launcher with animation
-└── requirements.txt           # Python dependencies
-```
 
 ---
 
