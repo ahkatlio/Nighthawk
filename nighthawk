@@ -1,0 +1,18 @@
+# Nighthawk Command Line Entry Point
+# This script can be symlinked to /usr/local/bin/nighthawk for system-wide access
+
+SCRIPT_PATH="$(readlink -f "${BASH_SOURCE[0]}")"
+NIGHTHAWK_DIR="$(dirname "$SCRIPT_PATH")"
+
+if [ ! -d "$NIGHTHAWK_DIR" ]; then
+    echo "Error: Nighthawk directory not found at $NIGHTHAWK_DIR"
+    exit 1
+fi
+
+if [ ! -f "$NIGHTHAWK_DIR/start_tui.sh" ]; then
+    echo "Error: start_tui.sh not found in $NIGHTHAWK_DIR"
+    exit 1
+fi
+
+cd "$NIGHTHAWK_DIR" || exit 1
+bash "$NIGHTHAWK_DIR/start_tui.sh" "$@"
