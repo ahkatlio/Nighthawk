@@ -124,6 +124,48 @@ ollama list
 ./start_tui.sh
 ```
 
+### 🚀 Make Nighthawk a System-Wide Command
+
+Want to run `nighthawk` from anywhere? Follow these steps:
+
+```bash
+# 1. Navigate to Nighthawk directory
+cd ~/Documents/Nighthawk
+
+# 2. Run the setup script
+bash setup.sh
+
+# 3. Verify installation
+nighthawk
+```
+
+**What this does:**
+- Creates an executable entry point at `/usr/local/bin/nighthawk`
+- Allows you to launch Nighthawk from any directory
+- No need to navigate to the project folder
+
+**Manual Installation (Alternative):**
+
+If you prefer to do it manually:
+
+```bash
+# 1. Make the nighthawk script executable
+chmod +x ~/Documents/Nighthawk/nighthawk
+
+# 2. Create a symlink (requires sudo)
+sudo ln -s ~/Documents/Nighthawk/nighthawk /usr/local/bin/nighthawk
+
+# 3. Verify it works
+nighthawk
+```
+
+**To Uninstall:**
+
+```bash
+# Remove the system command
+sudo rm /usr/local/bin/nighthawk
+```
+
 ---
 
 ## 🎯 Usage Guide
@@ -131,10 +173,13 @@ ollama list
 ### Launching Nighthawk
 
 ```bash
-# Terminal User Interface (Recommended)
+# Option 1: System-wide command (after running setup.sh)
+nighthawk
+
+# Option 2: From project directory
 ./start_tui.sh
 
-# Command-Line Interface
+# Option 3: Command-Line Interface
 ./start.sh
 ```
 
@@ -288,23 +333,6 @@ flowchart TD
 - **↑/↓**: Navigate command history
 - **Tab**: Switch focus between widgets
 
-### Command Recognition
-
-Nighthawk intelligently understands intent:
-
-```bash
-# These all trigger network scanning:
-"scan example.com"
-"check example.com for vulnerabilities"
-"run nmap on example.com"
-"do reconnaissance on example.com"
-
-# These trigger chat mode:
-"what is nmap?"
-"how do I use this tool?"
-"what did the scan find?"
-```
-
 ---
 
 ## 🐛 Troubleshooting
@@ -412,7 +440,7 @@ This project is licensed under the **MIT License**.
 
 - **Issues**: [GitHub Issues](https://github.com/ahkatlio/Nighthawk/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/ahkatlio/Nighthawk/discussions)
-- **Author**: ahkatlio
+- **Author**: Ahkatlio
 
 ---
 
@@ -421,6 +449,10 @@ This project is licensed under the **MIT License**.
 **🚀 Ready to begin?**
 
 ```bash
+# After running setup.sh:
+nighthawk
+
+# Or from project directory:
 ./start_tui.sh
 ```
 
