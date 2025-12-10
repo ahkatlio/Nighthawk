@@ -183,21 +183,6 @@ nighthawk
 ./start.sh
 ```
 
-### 💬 Chat Tab - Conversational Interface
-
-Ask questions, get help, or have casual conversations:
-
-```
-You: What tools do you have available?
-Nighthawk: I have integrated Nmap for network scanning and Metasploit for exploitation...
-
-You: How do I scan a website?
-Nighthawk: Simply say "scan example.com" and I'll perform reconnaissance...
-
-You: What vulnerabilities did you find?
-Nighthawk: Based on the last scan, I found SSH running on port 22...
-```
-
 ### 🔍 Scan Tab - Security Operations
 
 Perform actual security assessments:
