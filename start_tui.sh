@@ -157,58 +157,11 @@ echo -e "${MAGENTA}${BOLD}══════════════════
 
 sleep 1
 
-clear
-tput civis
-
-cols=$(tput cols)
-rows=$(tput lines)
-
-mapfile -t nighthawk_art < banner.txt
-
-art_height=${#nighthawk_art[@]}
-art_width=${#nighthawk_art[0]}
-start_row=$(((rows - art_height) / 2))
-start_col=$(((cols - art_width) / 2))
-
-chars=(0 1 2 3 4 5 6 7 8 9 A B C D E F G H I J K L M N O P Q R S T U V W X Y Z a b c d e f g h i j k l m n o p q r s t u v w x y z @ '#' $ % '&' '*')
-
-for ((line=0; line<art_height; line++)); do
-    text="${nighthawk_art[$line]}"
-    target_row=$((start_row + line))
-    
-    for ((col_offset=0; col_offset<${#text}; col_offset++)); do
-        char="${text:$col_offset:1}"
-        target_col=$((start_col + col_offset))
-        if [ "$char" = " " ]; then
-            continue
-        fi
-        random_char=${chars[$((RANDOM % ${#chars[@]}))]}
-        tput cup $target_row $target_col
-        echo -ne "\033[32m$random_char\033[0m"
-    done
-done
-
-sleep 0.5
-
-for ((line=$((art_height-1)); line>=0; line--)); do
-    text="${nighthawk_art[$line]}"
-    target_row=$((start_row + line))
-    for ((col_offset=0; col_offset<${#text}; col_offset++)); do
-        final_char="${text:$col_offset:1}"
-        target_col=$((start_col + col_offset))
-        if [ "$final_char" = " " ]; then
-            continue
-        fi
-        tput cup $target_row $target_col
-        echo -ne "\033[92m$final_char\033[0m"
-    done
-    sleep 0.1
-done
-
-sleep 1
-
-tput cnorm
-clear
+if [ -f "animations/intro.sh" ]; then
+    bash animations/intro.sh
+else
+    clear
+fi
 
 echo -e "${CYAN}${BOLD}Launching Nighthawk TUI...${NC}"
 echo -e "${DIM}Press Ctrl+C to exit the TUI${NC}\n"
@@ -218,13 +171,19 @@ sleep 1
 $PYTHON_CMD main_TUI.py
 
 EXIT_CODE=$?
-echo -e "\n${CYAN}${BOLD}════════════════════════════════════════════════════════${NC}"
-if [ $EXIT_CODE -eq 0 ]; then
-    echo -e "${GREEN}✓ Nighthawk TUI exited normally${NC}"
+
+if [ -f "animations/outro.sh" ]; then
+    bash animations/outro.sh $EXIT_CODE
 else
-    echo -e "${YELLOW}⚠ TUI exited with code: ${EXIT_CODE}${NC}"
+    echo -e "\n${CYAN}${BOLD}════════════════════════════════════════════════════════${NC}"
+    if [ $EXIT_CODE -eq 0 ]; then
+        echo -e "${GREEN}✓ Nighthawk TUI exited normally${NC}"
+    else
+        echo -e "${YELLOW}⚠ TUI exited with code: ${EXIT_CODE}${NC}"
+    fi
+    echo -e "${CYAN}${BOLD}════════════════════════════════════════════════════════${NC}\n"
+    echo -e "\n${DIM}Thank you for using Nighthawk! 🦅${NC}"
 fi
-echo -e "${CYAN}${BOLD}════════════════════════════════════════════════════════${NC}\n"
 
 echo -e "${CYAN}Cleaning up services...${NC}"
 if command_exists systemctl && command_exists ollama; then
@@ -238,5 +197,3 @@ if command_exists systemctl && command_exists ollama; then
         fi
     fi
 fi
-
-echo -e "\n${DIM}Thank you for using Nighthawk! 🦅${NC}"
