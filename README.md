@@ -24,7 +24,7 @@ Nighthawk is an intelligent security assistant that bridges the gap between conv
 
 ### 🎥 See Nighthawk in Action
 
-[![Nighthawk Demo Video](demo/image.png)](demo/demo.mp4)
+https://github.com/user-attachments/assets/150b53df-5902-42bc-ac60-8c2748e57e47
 
 *Click to watch: Experience the power of AI-driven security testing*
 
