@@ -20,6 +20,16 @@
 
 Nighthawk is an intelligent security assistant that bridges the gap between conversational input and professional penetration testing. Simply describe what you want to accomplish, and Nighthawk translates your intent into precise security commands, executes them, and provides AI-powered analysis of the results.
 
+<div align="center">
+
+### 🎥 See Nighthawk in Action
+
+**[▶️ Watch Demo Video](demo/demo.mp4)**
+
+*Experience the power of AI-driven security testing*
+
+</div>
+
 **Powered by:**
 - 🤖 **Ollama** - Local AI inference for intelligent command generation
 - 🎯 **Google Gemini** - Advanced natural language understanding
