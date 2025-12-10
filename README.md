@@ -448,6 +448,8 @@ This project is licensed under the **MIT License**.
 
 **🚀 Ready to begin?**
 
+</div>
+
 ```bash
 # After running setup.sh:
 nighthawk
@@ -455,6 +457,7 @@ nighthawk
 # Or from project directory:
 ./start_tui.sh
 ```
+<div align="center">
 
 *Stay ethical. Stay legal. Stay curious.* 🦅
 
