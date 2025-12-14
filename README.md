@@ -316,20 +316,6 @@ flowchart TD
 
 ---
 
-## 🎨 Interface Features
-
-### TUI Navigation
-
-- **Ctrl+1**: Switch to Chat tab
-- **Ctrl+2**: Switch to Settings tab
-- **Ctrl+W**: Stop audio playback (TTS)
-- **Ctrl+Q**: Exit Nighthawk
-- **Enter**: Send message/command
-- **↑/↓**: Navigate command history
-- **Tab**: Switch focus between widgets
-
----
-
 ## 🐛 Troubleshooting
 
 ### Ollama Not Responding
