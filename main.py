@@ -197,7 +197,6 @@ User message: """
         
         request_lower = user_request.lower()
         
-        # Check exploit patterns first
         for pattern in exploit_patterns:
             if re.search(pattern, request_lower):
                 return 'EXPLOIT'
