@@ -5,8 +5,11 @@ import asyncio
 from typing import Optional, Dict
 from urllib.parse import urlparse
 import ollama
-import google.generativeai as genai
-from google.generativeai.types import FunctionDeclaration, Tool
+try:
+    import google.generativeai as genai
+    from google.generativeai.types import FunctionDeclaration, Tool
+except ImportError:
+    genai = None
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.panel import Panel
@@ -107,8 +110,13 @@ class NighthawkAssistant:
     # NEW: NATIVE MCP TOOL CALLING
     # ---------------------------------------------------------
 
-    async def process_request(self, user_input: str) -> str:
+    async def process_request(self, user_input: str, log_callback=None) -> str:
         """Handles the native AI tool calling loop using the active model."""
+        def log(msg):
+            self.console.print(msg)
+            if log_callback:
+                log_callback(msg)
+                
         try:
             tools_schema = await self.mcp_client.get_tools()
         except Exception as e:
@@ -117,11 +125,11 @@ class NighthawkAssistant:
         self.conversation_history.append({"role": "user", "content": user_input})
         
         if self.current_model == "gemini" and self.gemini_chat:
-            return await self._chat_gemini_with_tools(user_input, tools_schema)
+            return await self._chat_gemini_with_tools(user_input, tools_schema, log)
         else:
-            return await self._chat_ollama_with_tools(tools_schema)
+            return await self._chat_ollama_with_tools(tools_schema, log)
 
-    async def _chat_gemini_with_tools(self, user_input: str, tools_schema) -> str:
+    async def _chat_gemini_with_tools(self, user_input: str, tools_schema, log_callback) -> str:
         # Convert MCP schema to Gemini FunctionDeclarations loosely
         formatted_tools = []
         for t in tools_schema:
@@ -139,84 +147,186 @@ class NighthawkAssistant:
                 pass
                 
         try:
-            # We bypass passing tools explicitly if unstructured, or just send a prompt containing tool descriptions 
-            # if genai library fails with custom dicts. Let's just ask Gemini natively.
-            sys_msg = "You have access to the following tools: " + str(formatted_tools) + "\n If you want to use a tool, respond with JSON format like {'tool_call': 'tool_name', 'arguments': {'arg1': 'val1'}}"
+            sys_msg = (
+                "You are an AI assistant orchestrating security tools. You have access to these tools: " + str(formatted_tools) + 
+                "\n\nCRITICAL INSTRUCTION: To execute a tool, your response MUST be a dictionary EXACTLY in this format:"
+                "\n{'tool_call': 'tool_name', 'arguments': {'parameter_name': 'parameter_value'}}"
+                "\n\nDO NOT write Python code (like print(tool())). DO NOT use 'tool_code'. ONLY use the format above."
+            )
             
             response = self.gemini_chat.send_message(
                 sys_msg + "\n\nUser message: " + user_input
             )
             
-            if "tool_call" in response.text:
+            if "{" in response.text and "}" in response.text:
                 try:
+                    import ast
                     import json
-                    match = re.search(r'\\{[^{}]*"tool_call"[^{}]*\\}', response.text)
-                    if match:
-                        call_data = json.loads(match.group(0))
-                        tool_name = call_data['tool_call']
-                        args = call_data.get('arguments', {})
-                        self.console.print(f"\n[dim]🛠 Executing tool via Gemini: {tool_name}[/dim]")
-                        result = await self.mcp_client.execute_tool(tool_name, args)
-                        self.console.print(f"[dim]Tool succeeded. Analyzing results...[/dim]")
+                    import re
+                    start = response.text.find("{")
+                    end = -1
+                    if start != -1:
+                        brace_count = 0
+                        for i in range(start, len(response.text)):
+                            if response.text[i] == '{':
+                                brace_count += 1
+                            elif response.text[i] == '}':
+                                brace_count -= 1
+                                if brace_count == 0:
+                                    end = i
+                                    break
+                                    
+                    if start != -1 and end != -1:
+                        dict_str = response.text[start:end+1]
+                        call_data = None
                         
-                        follow_up = self.gemini_chat.send_message("Tool returned: " + result + "\n\nPlease summarize the findings.")
-                        final_text = follow_up.text
-                        self.conversation_history.append({"role": "assistant", "content": final_text})
-                        return final_text
+                        try:
+                            call_data = json.loads(dict_str)
+                        except Exception:
+                            try:
+                                modified_str = dict_str.replace("'", '"')
+                                modified_str = re.sub(r'\bTrue\b', 'true', modified_str)
+                                modified_str = re.sub(r'\bFalse\b', 'false', modified_str)
+                                modified_str = re.sub(r'\bNone\b', 'null', modified_str)
+                                call_data = json.loads(modified_str)
+                            except Exception:
+                                try:
+                                    call_data = ast.literal_eval(dict_str)
+                                except Exception:
+                                    pass
+                                    
+                        if call_data and isinstance(call_data, dict):
+                            tool_name = call_data.get('tool_call') or call_data.get('name')
+                            if tool_name:
+                                args = call_data.get('arguments', {})
+                                safe_args_str = str(args).replace("[", "\\[")
+                                log_callback(f"\n[yellow]🛠 Executing tool via Gemini:[/yellow] {tool_name}\n[dim]{safe_args_str}[/dim]")
+                                
+                                result = await self.mcp_client.execute_tool(tool_name, args)
+                                log_callback(f"[green]✓ Tool succeeded.[/green] [dim]Output ({len(str(result))} chars)[/dim] Analyzing results...")
+                                
+                                follow_up = self.gemini_chat.send_message("Tool returned: " + str(result) + "\n\nPlease summarize the findings.")
+                                final_text = follow_up.text
+                                self.conversation_history.append({"role": "assistant", "content": final_text})
+                                return final_text
                 except Exception as e:
-                    return response.text + f" (Tool parsing error: {e})"
+                    log_callback(f"[dim yellow]⚠ Gemini dictionary parsing failed: {e}[/dim yellow]")
             
             self.conversation_history.append({"role": "assistant", "content": response.text})
             return response.text
         except Exception as e:
-            self.console.print(f"[dim yellow]⚠ Gemini error: {e}[/dim yellow]")
+            log_callback(f"[dim yellow]⚠ Gemini error: {e}[/dim yellow]")
             return f"Error communicating with Gemini: {e}"
 
-    async def _chat_ollama_with_tools(self, tools_schema) -> str:
-        formatted_tools = [{
-            "type": "function",
-            "function": {
-                "name": t["name"],
+    async def _chat_ollama_with_tools(self, tools_schema, log_callback) -> str:
+        formatted_tools = []
+        for t in tools_schema:
+            formatted_tools.append({
+                "name": t.get("name"),
                 "description": t.get("description", ""),
                 "parameters": t.get("inputSchema", {})
-            }
-        } for t in tools_schema]
+            })
+            
+        sys_msg = (
+            "You are an AI assistant orchestrating security tools. You have access to these tools: " + str(formatted_tools) + 
+            "\n\nCRITICAL INSTRUCTION: To execute a tool, your response MUST be a dictionary EXACTLY in this format:"
+            "\n{'tool_call': 'tool_name', 'arguments': {'parameter_name': 'parameter_value'}}"
+            "\n\nDO NOT write Python code (like print(tool())). DO NOT use 'tool_code'. ONLY use the dictionary format above and nothing else."
+        )
+        
+        messages = [{"role": "system", "content": sys_msg}] + self.conversation_history
         
         try:
             response = ollama.chat(
                 model=self.model,
-                messages=self.conversation_history,
-                tools=formatted_tools
+                messages=messages
             )
             
             response_message = response.get('message', {})
+            response_text = response_message.get('content', '')
             
-            if response_message.get('tool_calls'):
-                for tool_call in response_message['tool_calls']:
-                    tool_name = tool_call['function']['name']
-                    arguments = tool_call['function']['arguments']
+            if "{" in response_text and "}" in response_text:
+                try:
+                    import ast
+                    import json
+                    import re
                     
-                    self.console.print(f"\n[dim]🛠 Executing tool via Ollama: {tool_name}[/dim]")
-                    
-                    try:
-                        tool_result = await self.mcp_client.execute_tool(tool_name, arguments)
-                        self.console.print(f"[dim]Tool succeeded. Analyzing results...[/dim]")
-                    except Exception as e:
-                        tool_result = f"Error running {tool_name}: {e}"
+                    # 1. Find the first '{' and precisely match its closing '}'
+                    start = response_text.find("{")
+                    end = -1
+                    if start != -1:
+                        brace_count = 0
+                        for i in range(start, len(response_text)):
+                            if response_text[i] == '{':
+                                brace_count += 1
+                            elif response_text[i] == '}':
+                                brace_count -= 1
+                                if brace_count == 0:
+                                    end = i
+                                    break
+                                    
+                    if start != -1 and end != -1:
+                        dict_str = response_text[start:end+1]
                         
-                    self.conversation_history.append(response_message)
-                    self.conversation_history.append({
-                        "role": "tool",
-                        "name": tool_name,
-                        "content": tool_result
-                    })
-                    
-                # Recursive call after tool result
-                return await self._chat_ollama_with_tools(tools_schema)
+                        call_data = None
+                        try:
+                            # Try parsing as strict JSON first
+                            call_data = json.loads(dict_str)
+                        except Exception:
+                            try:
+                                # Fallback 1: Replace single quotes with double quotes for valid JSON
+                                modified_str = dict_str.replace("'", '"')
+                                # Fix python booleans/none if they were generated
+                                modified_str = re.sub(r'\bTrue\b', 'true', modified_str)
+                                modified_str = re.sub(r'\bFalse\b', 'false', modified_str)
+                                modified_str = re.sub(r'\bNone\b', 'null', modified_str)
+                                call_data = json.loads(modified_str)
+                            except Exception:
+                                # Fallback 2: AST Eval for Python dictionary representation
+                                try:
+                                    call_data = ast.literal_eval(dict_str)
+                                except Exception:
+                                    pass
+                                    
+                        if call_data and isinstance(call_data, dict):
+                            tool_name = call_data.get('tool_call') or call_data.get('name')
+                            arguments = call_data.get('arguments', {})
+                            
+                            # Extreme fallback if dolphin-llama3 output `{'tool_code': "print(nikto_scan(target='...'))"}`
+                            tool_code_fallback = call_data.get('tool_code', '')
+                            if not tool_name and tool_code_fallback:
+                                match = re.search(r'([a-zA-Z0-9_]+)\(', str(tool_code_fallback))
+                                if match:
+                                    tool_name = match.group(1)
+                                    args_match = re.search(r'target=[\'"]([^\'"]+)[\'"]', str(tool_code_fallback))
+                                    if args_match:
+                                        arguments = {'target': args_match.group(1)}
+
+                            if tool_name:
+                                safe_args_str = str(arguments).replace("[", "\\[")
+                                log_callback(f"\n[yellow]🛠 Executing tool via Ollama:[/yellow] {tool_name}\n[dim]{safe_args_str}[/dim]")
+                                
+                                try:
+                                    tool_result = await self.mcp_client.execute_tool(tool_name, arguments)
+                                    log_callback(f"[green]✓ Tool succeeded.[/green] [dim]Output ({len(str(tool_result))} chars)[/dim] Analyzing results...")
+                                except Exception as e:
+                                    tool_result = f"Error running {tool_name}: {e}"
+                                    log_callback(f"[red]❌ Tool failed:[/red] {e}")
+                                    
+                                self.conversation_history.append({"role": "assistant", "content": response_text})
+                                self.conversation_history.append({
+                                    "role": "user",
+                                    "content": f"Tool '{tool_name}' returned: {tool_result}\n\nPlease summarize the findings."
+                                })
+                                
+                                return await self._chat_ollama_with_tools(tools_schema, log_callback)
+                except Exception as e:
+                    log_callback(f"[dim yellow]⚠ Could not parse tool call dict:[/dim yellow] {e}")
+                    pass # Continue outputting raw text if everything fails
                 
-            final_text = response_message.get('content', '')
-            self.conversation_history.append({"role": "assistant", "content": final_text})
-            return final_text
+            self.conversation_history.append({"role": "assistant", "content": response_text})
+            return response_text
+
             
         except Exception as e:
             return f"Error with Ollama: {e}"
