@@ -582,6 +582,33 @@ class NighthawkInstaller:
                 print(self.fx.status('info', 'Skipping Gemini API configuration'))
         print()
     
+    def install_mcp_server(self):
+        """Clone and setup MCP-Kali-Server."""
+        print(self.fx.status('info', 'Setting up MCP Kali Server...'))
+        mcp_dir = Path(self.base_dir) / 'tools' / 'mcp_server'
+        if not mcp_dir.exists():
+            print(self.fx.text('Cloning MCP-Kali-Server...', 'cyan'))
+            try:
+                subprocess.run(['git', 'clone', 'https://github.com/Wh0am123/MCP-Kali-Server.git', str(mcp_dir)], check=True)
+                print(self.fx.status('success', 'MCP-Kali-Server cloned successfully!'))
+            except subprocess.CalledProcessError as e:
+                print(self.fx.status('error', f'Failed to clone MCP-Kali-Server: {e}'))
+                raise
+        else:
+            print(self.fx.text('MCP-Kali-Server already exists.', 'neon_blue'))
+        
+        # Install MCP server requirements in the environment
+        mcp_reqs = mcp_dir / 'requirements.txt'
+        if mcp_reqs.exists():
+            print(self.fx.text('Installing MCP Server dependencies...', 'magenta'))
+            pip_cmd = [str(Path(self.base_dir) / '.venv' / 'bin' / 'pip'), 'install', '-r', str(mcp_reqs)]
+            try:
+                subprocess.run(pip_cmd, check=True, stdout=subprocess.DEVNULL)
+                print(self.fx.status('success', 'MCP Server dependencies installed!'))
+            except Exception as e:
+                print(self.fx.status('warning', f'Could not install MCP dependencies: {e}'))
+        print()
+
     def test_installation(self):
         self.fx.type_writer(self.fx.matrix_prompt('RUNNING FINAL DIAGNOSTICS...'), 0.04)
         print()
@@ -637,6 +664,7 @@ class NighthawkInstaller:
             self.create_venv()
             self.install_packages()
             self.setup_environment()
+            self.install_mcp_server()
             self.test_installation()
             self.show_completion()
             
