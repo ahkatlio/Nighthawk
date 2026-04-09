@@ -212,282 +212,44 @@ class ChatArea(Container):
         progress = self.query_one("#process-progress", ProgressBar)
         status = self.query_one("#status-indicator", Label)
         spinner = self.query_one("#loading-spinner", LoadingIndicator)
-        verbose = self.query_one("#verbose-toggle", Checkbox).value
-        autoscroll = self.query_one("#autoscroll-toggle", Checkbox).value
         
         progress.remove_class("hidden")
         progress.update(total=None)
         spinner.remove_class("hidden")
-        status.update(f"Processing ({self.current_mode})...")
+        status.update(f"Processing...")
         self.is_processing = True
         
         try:
-            timestamp = datetime.now().strftime("%H:%M:%S")
-            await self._write_with_typing(process_log, f"[cyan][{timestamp}] 📨 Processing {self.current_mode} request: {message}[/cyan]\n")
-            
             assistant = getattr(self.app, 'assistant', None)
-            
             if not assistant:
-                chat_history.mount(ChatMessage(
-                    "**Error:** Assistant not initialized. Please restart the TUI.",
-                    is_user=False
-                ))
-                status.update("🔴 Error")
+                chat_history.mount(ChatMessage("**Error:** Assistant not initialized.", is_user=False))
                 return
             
-            model_name = "GEMINI" if assistant.current_model == "gemini" else "OLLAMA"
-            model_indicator = self.query_one("#model-indicator", Label)
-            model_indicator.update(f"🤖 Model: {model_name}")
+            if not assistant.mcp_client.session:
+                process_log.write("[yellow]Connecting to MCP Server...[/yellow]\n")
+                await assistant.mcp_client.connect()
+                process_log.write("[green]✓ Connection established[/green]\n")
+                
+            process_log.write(f"[cyan]Processing with {assistant.current_model}...[/cyan]\n")
             
-            if verbose:
-                await self._write_with_typing(process_log, f"[yellow]⚡ Using {model_name} model...[/yellow]\n")
+            def log_callback(msg):
+                process_log.write(msg + "\n")
+                process_log.scroll_end(animate=True)
+
+            ai_response = await assistant.process_request(message, log_callback=log_callback)
             
-            # Run in thread to avoid blocking
-            if self.current_mode == "CHAT":
-                ai_response = await asyncio.to_thread(
-                    assistant.ask_ai,
-                    message,
-                    is_casual=True
-                )
-                await self._write_with_typing(process_log, "[green]✅ Response generated[/green]\n")
+            chat_history.mount(ChatMessage(ai_response, is_user=False))
+            chat_history.scroll_end(animate=True)
                 
-                chat_history.mount(ChatMessage(ai_response, is_user=False))
+            # If TTS is available, we speak it
+            # Not fully supported dynamically here since TTS is complex without TUI context
                 
-                if autoscroll:
-                    chat_history.scroll_end(animate=True)
-                
-                if TTS_AVAILABLE:
-                    try:
-                        tts = get_tts_service()
-                        if tts.is_enabled():
-                            tts.speak_text(ai_response, blocking=False)
-                    except Exception as e:
-                        pass
-                
-            elif self.current_mode in ["SCAN", "EXPLOIT"]:
-                await self._write_with_typing(process_log, f"[yellow]🔧 Detecting required tool...[/yellow]\n")
-                
-                ai_response = await asyncio.to_thread(
-                    assistant.ask_ai,
-                    message,
-                    is_casual=False
-                )
-                
-                tool_name = assistant.detect_tool(message, ai_response)
-                
-                if not tool_name or tool_name not in assistant.tools:
-                    if self.current_mode == "SCAN":
-                        tool_name = "nmap"
-                    elif self.current_mode == "EXPLOIT":
-                        tool_name = "metasploit"
-                
-                if tool_name in assistant.tools:
-                    tool = assistant.tools[tool_name]
-                    await self._write_with_typing(process_log, f"[green]✓ Selected tool: {tool_name}[/green]\n")
-                    
-                    hostname = await asyncio.to_thread(assistant.extract_hostname, message)
-                    if hostname:
-                        await self._write_with_typing(process_log, f"[cyan]🎯 Target: {hostname}[/cyan]\n")
-                    
-                    await self._write_with_typing(process_log, f"[yellow]🔨 Generating {tool_name} command...[/yellow]\n")
-                    
-                    if tool_name == "metasploit":
-                        scan_context = await asyncio.to_thread(
-                            assistant.prepare_scan_context,
-                            hostname or assistant.last_target
-                        )
-                        if scan_context:
-                            await self._write_with_typing(process_log, f"[cyan]📊 Using scan results from previous nmap scan[/cyan]\n")
-                        tool._scan_context = scan_context
-                        tool.set_progress_callback(None)
-                    
-                    command = await asyncio.to_thread(tool.generate_command, message, ai_response)
-                    
-                    if command:
-                        if isinstance(command, list):
-                            if not command:
-                                process_log.write("[red]❌ No commands generated[/red]")
-                                chat_history.mount(ChatMessage(
-                                    f"I couldn't generate valid {tool_name} commands for that request.",
-                                    is_user=False
-                                ))
-                                status.update("🟢 Ready")
-                                return
-                            
-                            if tool_name == "metasploit":
-                                process_log.write(f"[cyan]📝 Generated {len(command)} Metasploit commands[/cyan]")
-                                for cmd in command[:5]:
-                                    process_log.write(f"[dim]  • {cmd}[/dim]")
-                                if len(command) > 5:
-                                    process_log.write(f"[dim]  ... and {len(command) - 5} more[/dim]")
-                                
-                                process_log.write(f"[yellow]{'═' * 50}[/yellow]")
-                                process_log.write(f"[yellow]🚀 Executing METASPLOIT...[/yellow]")
-                                process_log.write(f"[yellow]{'═' * 50}[/yellow]")
-                                
-                                result = await asyncio.to_thread(tool.execute, command)
-                            else:
-                                command = ' && '.join(command)
-                                await self._write_with_typing(process_log, f"[cyan]📝 Command: {command}[/cyan]\n")
-                        else:
-                            await self._write_with_typing(process_log, f"[cyan]📝 Command: {command}[/cyan]\n")
-                        
-                        if isinstance(command, str) and command.strip().startswith('sudo '):
-                            process_log.write(f"[yellow]🔐 Command requires sudo privileges[/yellow]")
-                            password = await self.app.push_screen_wait(SudoPasswordScreen(command))
-                            
-                            if password is None:
-                                process_log.write(f"[yellow]⚠️ Authentication cancelled[/yellow]")
-                                chat_history.mount(ChatMessage(
-                                    "Authentication cancelled. The command was not executed.",
-                                    is_user=False
-                                ))
-                                status.update("🟢 Ready")
-                                return
-                            
-                            process_log.write(f"[green]✓ Password received[/green]")
-                            command_clean = command.replace('sudo ', '', 1)
-                            result = await self._execute_with_sudo(command_clean, password, process_log)
-                        elif isinstance(command, str):
-                            process_log.write(f"[yellow]{'═' * 50}[/yellow]")
-                            await self._write_with_typing(process_log, f"[yellow]🚀 Executing {tool_name.upper()}...[/yellow]\n")
-                            process_log.write(f"[yellow]{'═' * 50}[/yellow]")
-                            result = await asyncio.to_thread(tool.execute, command)
-                        
-                        if result['success']:
-                            target = hostname if hostname else "unknown"
-                            assistant.scan_results[target] = result['stdout']
-                            assistant.last_target = target
-                            
-                            if tool_name == 'nmap' and hasattr(tool, 'parse_scan_data'):
-                                parsed_data = tool.parse_scan_data(result['stdout'])
-                                assistant.scan_results[f"{target}_parsed"] = parsed_data
-                            
-                            for line in result['stdout'].split('\n'):
-                                if line.strip():
-                                    if 'open' in line.lower():
-                                        process_log.write(f"[green]  ✓ {line}[/green]")
-                                    elif 'error' in line.lower() or 'failed' in line.lower():
-                                        process_log.write(f"[red]  ✗ {line}[/red]")
-                                    else:
-                                        process_log.write(f"[cyan]  {line}[/cyan]")
-                            
-                            process_log.write(f"[yellow]{'═' * 50}[/yellow]")
-                            await self._write_with_typing(process_log, f"[green]✅ {tool_name.upper()} COMPLETED[/green]\n")
-                            process_log.write(f"[yellow]{'═' * 50}[/yellow]")
-                            
-                            await self._write_with_typing(process_log, f"[yellow]🧠 Analyzing results with {model_name}...[/yellow]\n")
-                            analysis = await asyncio.to_thread(
-                                assistant.ask_ai,
-                                message,
-                                output_to_analyze=result['stdout']
-                            )
-                            
-                            await self._write_with_typing(process_log, "[green]✅ Analysis complete[/green]\n")
-                            
-                            chat_history.mount(ChatMessage(analysis, is_user=False))
-                            
-                            if autoscroll:
-                                chat_history.scroll_end(animate=True)
-                            
-                            if TTS_AVAILABLE:
-                                try:
-                                    tts = get_tts_service()
-                                    if tts.is_enabled():
-                                        await asyncio.to_thread(tts.speak_text, analysis, blocking=False)
-                                except Exception as e:
-                                    pass
-                        else:
-                            process_log.write(f"[red]❌ Error executing {tool_name}:[/red]")
-                            for line in result['stderr'].split('\n'):
-                                if line.strip():
-                                    process_log.write(f"[red]  {line}[/red]")
-                            
-                            chat_history.mount(ChatMessage(
-                                f"**Error executing {tool_name}:**\n```\n{result['stderr']}\n```",
-                                is_user=False
-                            ))
-                    else:
-                        process_log.write("[red]❌ Could not generate command[/red]")
-                        chat_history.mount(ChatMessage(
-                            f"I couldn't generate a {tool_name} command for that request. Can you be more specific?",
-                            is_user=False
-                        ))
-                else:
-                    process_log.write("[yellow]⚠️ No tool detected, showing AI response[/yellow]")
-                    chat_history.mount(ChatMessage(ai_response, is_user=False))
-                    
-                    if autoscroll:
-                        chat_history.scroll_end(animate=True)
-                    
-                    if TTS_AVAILABLE:
-                        try:
-                            tts = get_tts_service()
-                            if tts.is_enabled():
-                                await asyncio.to_thread(tts.speak_text, ai_response, blocking=False)
-                        except Exception as e:
-                            pass
-            
-            if autoscroll:
-                chat_history.scroll_end(animate=True)
-            
-            status.update("🟢 Ready")
-            
         except Exception as e:
-            import traceback
-            error_details = traceback.format_exc()
-            process_log.write(f"[red]❌ Error: {e}[/red]")
-            process_log.write(f"[dim]{error_details}[/dim]")
-            chat_history.mount(ChatMessage(
-                f"**Error occurred:** `{str(e)}`",
-                is_user=False
-            ))
-            status.update("🔴 Error")
+            process_log.write(f"[red]❌ Error:[/red] {str(e)}\n")
+            chat_history.mount(ChatMessage(f"**Error:** `{e}`", is_user=False))
         finally:
             progress.add_class("hidden")
             spinner.add_class("hidden")
-            progress.update(total=100, progress=100)
+            status.update("🟢 Ready")
             self.is_processing = False
-    
-    async def _execute_with_sudo(self, command: str, password: str, process_log: RichLog) -> Dict[str, any]:
-        process_log.write(f"[yellow]{'═' * 50}[/yellow]")
-        process_log.write(f"[yellow]🚀 Executing with SUDO...[/yellow]")
-        process_log.write(f"[yellow]{'═' * 50}[/yellow]")
-        
-        def run_sudo():
-            try:
-                process = subprocess.Popen(
-                    ['sudo', '-S'] + command.split(),
-                    stdin=subprocess.PIPE,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True
-                )
-                
-                stdout, stderr = process.communicate(input=password + '\n', timeout=300)
-                
-                return {
-                    'success': process.returncode == 0,
-                    'stdout': stdout,
-                    'stderr': stderr,
-                    'returncode': process.returncode
-                }
-            except subprocess.TimeoutExpired:
-                process.kill()
-                return {
-                    'success': False,
-                    'stdout': '',
-                    'stderr': 'Command timed out',
-                    'returncode': -1
-                }
-            except Exception as e:
-                return {
-                    'success': False,
-                    'stdout': '',
-                    'stderr': str(e),
-                    'returncode': -1
-                }
-        
-        return await asyncio.to_thread(run_sudo)
-
 
