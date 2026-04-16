@@ -13,11 +13,20 @@ class SettingsTab(Container):
     def on_mount(self) -> None:
         assistant = getattr(self.app, 'assistant', None)
         if assistant:
-            radio_set = self.query_one("#model-select")
+            dropdown = self.query_one("#model-dropdown", Select)
+            default_value = "gemini-2.5-flash"
             if assistant.current_model == "gemini":
-                self.query_one("#model-pro").value = True
+                # Check if assistant has a gemini chat instance and its model name
+                model_name = getattr(assistant.gemini_chat.model, "model_name", "gemini-2.5-flash") if getattr(assistant, "gemini_chat", None) else "gemini-2.5-flash"
+                default_value = model_name if model_name.startswith("gemini-") else "gemini-2.5-flash"
             elif assistant.current_model == "ollama":
-                self.query_one("#model-ollama").value = True
+                default_value = f"ollama-{assistant.model}"
+            
+            # If the option doesn't exist, we fall back to something default or let Select default out.
+            try:
+                dropdown.value = default_value
+            except Exception:
+                dropdown.value = "gemini-2.5-flash"
         
         try:
             from tui.tts_service import get_tts_service
@@ -37,10 +46,37 @@ class SettingsTab(Container):
             with Container(classes="settings-group"):
                 yield Label("🧠 AI Model Selection", classes="group-title")
                 yield Label("Choose your preferred AI model:", classes="setting-label")
-                with RadioSet(id="model-select"):
-                    yield RadioButton("Gemini 2.5 Pro (Recommended)", value=True, id="model-pro")
-                    yield RadioButton("Gemini 2.5 Flash (Faster, Lower Cost)", id="model-flash")
-                    yield RadioButton("Ollama (Local/Offline)", id="model-ollama")
+                
+                # Load Ollama models safely
+                ollama_options = []
+                try:
+                    import ollama
+                    response = ollama.list()
+                    # `ollama.list()` returns an object with a `models` attribute in newer versions
+                    models = getattr(response, "models", [])
+                    if not models and isinstance(response, dict):
+                        models = response.get("models", [])
+                        
+                    for m in models:
+                        if isinstance(m, dict):
+                            name = m.get("name") or m.get("model", str(m))
+                        else:
+                            name = getattr(m, "model", getattr(m, "name", str(m)))
+                        
+                        if name:
+                            ollama_options.append((f"Ollama - {name}", f"ollama-{name}"))
+                except Exception:
+                    pass
+                
+                yield Select(
+                    [
+                        ("Gemini 2.5 Pro (Recommended)", "gemini-2.5-pro"),
+                        ("Gemini 2.5 Flash (Faster, Lower Cost)", "gemini-2.5-flash"),
+                    ] + ollama_options,
+                    value="gemini-2.5-flash",
+                    id="model-dropdown",
+                    allow_blank=False
+                )
             
             with Container(classes="settings-group"):
                 yield Label("🔊 Text-to-Speech", classes="group-title")
@@ -86,6 +122,33 @@ class SettingsTab(Container):
                 self.notify(f"🎤 Voice model changed", severity="information")
             except Exception as e:
                 self.notify(f"⚠️ Voice change failed: {e}", severity="error")
+                
+        elif event.select.id == "model-dropdown":
+            selected = event.value
+            assistant = getattr(self.app, 'assistant', None)
+            
+            if assistant:
+                if selected.startswith("gemini-"):
+                    if assistant.switch_model(selected):
+                        self.notify(f"🧠 Switched to {selected}", severity="information")
+                    else:
+                        self.notify(f"⚠️ Failed to init {selected}", severity="warning")
+                elif selected.startswith("ollama-"):
+                    if assistant.switch_model(selected):
+                        model_name = selected[7:]
+                        self.notify(f"🧠 Switched to Ollama ({model_name})", severity="information")
+                    else:
+                        self.notify(f"⚠️ Failed to init {selected}", severity="warning")
+                
+                try:
+                    chat_area = self.app.query_one("#chat-content")
+                    model_indicator = chat_area.query_one("#model-indicator", Label)
+                    model_name_disp = "GEMINI" if "gemini" in selected else "OLLAMA"
+                    model_indicator.update(f"🤖 Model: {model_name_disp}")
+                except:
+                    pass
+            else:
+                self.notify("⚠️ Assistant not initialized", severity="warning")
     
     def on_switch_changed(self, event: Switch.Changed) -> None:
         if event.switch.id == "tts-switch":
@@ -134,26 +197,4 @@ class SettingsTab(Container):
             except Exception as e:
                 pass
     
-    def on_radio_set_changed(self, event) -> None:
-        if event.radio_set.id == "model-select":
-            selected = event.pressed.id
-            assistant = getattr(self.app, 'assistant', None)
-            
-            if assistant:
-                if "pro" in selected or "flash" in selected:
-                    assistant.current_model = "gemini"
-                    model_display = "Gemini 2.5 Pro" if "pro" in selected else "Gemini 2.5 Flash"
-                    self.notify(f"🧠 Switched to {model_display}", severity="information")
-                elif "ollama" in selected:
-                    assistant.current_model = "ollama"
-                    self.notify(f"🧠 Switched to Ollama (Local)", severity="information")
-                
-                try:
-                    chat_area = self.app.query_one("#chat-content")
-                    model_indicator = chat_area.query_one("#model-indicator", Label)
-                    model_name = "GEMINI" if assistant.current_model == "gemini" else "OLLAMA"
-                    model_indicator.update(f"🤖 Model: {model_name}")
-                except:
-                    pass
-            else:
-                self.notify("⚠️ Assistant not initialized", severity="warning")
+
