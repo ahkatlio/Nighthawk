@@ -43,18 +43,18 @@ class NighthawkAssistant:
         self._init_gemini()
         self.mcp_client = MCPToolClient()
     
-    def _init_gemini(self):
+    def _init_gemini(self, model_name: str = "gemini-2.5-flash"):
         """Initialize Google Gemini API"""
         try:
             api_key = os.getenv("GOOGLE_API_KEY")
             if api_key:
                 genai.configure(api_key=api_key)
                 model = genai.GenerativeModel(
-                    model_name="gemini-2.5-flash",
-                    system_instruction="You are Nighthawk, an advanced security expert assistant. Help with security scanning, provide clear insights, use tools when needed, and remember conversation context."
+                    model_name=model_name,
+                    system_instruction="You are Nighthawk, an advanced security expert assistant. Help with security scanning, provide clear insights, use tools when needed, and remember conversation context. Note: A Gobuster wordlist is available at 'Go buster wordlist/wordlist.txt'."
                 )
                 self.gemini_chat = model.start_chat(history=[])
-                console.print("[dim green]✓ Google Gemini initialized[/dim green]")
+                console.print(f"[dim green]✓ Google Gemini ({model_name}) initialized[/dim green]")
             else:
                 console.print("[dim yellow]⚠ Google API key not found - Gemini unavailable[/dim yellow]")
         except Exception as e:
@@ -73,21 +73,30 @@ class NighthawkAssistant:
             
     def switch_model(self, model_name: str) -> bool:
         """Switch between AI models"""
-        model_name = model_name.lower()
-        if model_name in ["ollama", "dolphin", "local"]:
-            self.current_model = "ollama"
-            self.console.print(f"[green]✓ Switched to Ollama ({self.model})[/green]")
-            return True
-        elif model_name in ["gemini", "google"]:
-            if self.gemini_chat:
+        try:
+            if model_name.startswith("gemini"):
                 self.current_model = "gemini"
-                self.console.print("[green]✓ Switched to Google Gemini 2.5 Flash[/green]")
+                if not getattr(self, "gemini_chat", None) or getattr(self.gemini_chat.model, "model_name", "") != model_name:
+                    self._init_gemini(model_name=model_name)
+                
+                if self.gemini_chat:
+                    self.console.print(f"[green]✓ Switched to Google {model_name}[/green]")
+                    return True
+                else:
+                    self.console.print("[red]✗ Gemini is not available. Check your API key in .env file.[/red]")
+                    return False
+            elif model_name.startswith("ollama"):
+                self.current_model = "ollama"
+                # Strip "ollama-" prefix if it exists to get the actual model name
+                actual_model = model_name[7:] if model_name.startswith("ollama-") else "dolphin-llama3:8b"
+                self.model = actual_model
+                self.console.print(f"[green]✓ Switched to Ollama ({self.model})[/green]")
                 return True
             else:
-                self.console.print("[red]✗ Gemini is not available. Check your API key in .env file.[/red]")
+                self.console.print(f"[red]✗ Unknown model format: {model_name}[/red]")
                 return False
-        else:
-            self.console.print(f"[red]✗ Unknown model: {model_name}[/red]")
+        except Exception as e:
+            self.console.print(f"[red]Error switching models: {e}[/red]")
             return False
 
     def cleanup(self):
@@ -152,6 +161,7 @@ class NighthawkAssistant:
                 "\n\nCRITICAL INSTRUCTION: To execute a tool, your response MUST be a dictionary EXACTLY in this format:"
                 "\n{'tool_call': 'tool_name', 'arguments': {'parameter_name': 'parameter_value'}}"
                 "\n\nDO NOT write Python code (like print(tool())). DO NOT use 'tool_code'. ONLY use the format above."
+                "\nNote: A Gobuster wordlist is available at 'Go buster wordlist/wordlist.txt'."
             )
             
             response = self.gemini_chat.send_message(
@@ -232,6 +242,7 @@ class NighthawkAssistant:
             "\n\nCRITICAL INSTRUCTION: To execute a tool, your response MUST be a dictionary EXACTLY in this format:"
             "\n{'tool_call': 'tool_name', 'arguments': {'parameter_name': 'parameter_value'}}"
             "\n\nDO NOT write Python code (like print(tool())). DO NOT use 'tool_code'. ONLY use the dictionary format above and nothing else."
+            "\nNote: A Gobuster wordlist is available at 'Go buster wordlist/wordlist.txt'."
         )
         
         messages = [{"role": "system", "content": sys_msg}] + self.conversation_history
